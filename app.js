@@ -1198,6 +1198,7 @@ function renderSettings() {
   document.getElementById("sync-url").value = state.syncUrl || "";
   document.getElementById("sync-code").value = pairingCode();
   document.getElementById("pin-clear").hidden = !state.pinHash;
+  document.getElementById("pin-lock").hidden = !state.pinHash;
   document.getElementById("idle-lock-min").value = state.idleLockMinutes ?? 5;
   const templates = state.templates.filter((t) => !t.deleted);
   document.getElementById("cat-caps").innerHTML = categories().map(
@@ -2049,6 +2050,7 @@ function bind() {
     hideLockGate();
     toast("PIN removed");
   };
+  document.getElementById("pin-lock").onclick = () => lockNow();
   document.getElementById("unlock-form").onsubmit = async (e) => {
     e.preventDefault();
     const pin = document.getElementById("unlock-pin").value.trim();
@@ -2105,6 +2107,7 @@ function bind() {
     { id: "export", label: "Export JSON backup", run: exportJson },
     { id: "theme", label: "Toggle light theme", run: () => { state.theme = state.theme === "light" ? "dark" : "light"; saveState(); render(); } },
     { id: "compact", label: "Toggle compact layout", run: () => { state.density = state.density === "compact" ? "comfortable" : "compact"; saveState(); render(); } },
+    ...(state.pinHash ? [{ id: "lock", label: "Lock this device", run: lockNow }] : []),
   ];
   function renderPalette() {
     const q = (paletteQ.value || "").toLowerCase();
