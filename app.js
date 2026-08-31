@@ -417,9 +417,10 @@ async function copyMonthSummary() {
   }
 }
 
-function nudgeAmount(dir) {
+function nudgeAmount(dir, ev) {
   const el = document.getElementById("amount");
-  const step = state.currency === "৳" ? 10 : 1;
+  const taka = state.currency === "৳";
+  const step = ev && ev.shiftKey ? (taka ? 100 : 10) : taka ? 10 : 1;
   const n = Number.parseFloat(el.value);
   const base = Number.isFinite(n) ? n : 0;
   el.value = String(Math.max(0, Math.round((base + dir * step) * 100) / 100));
@@ -715,9 +716,12 @@ function renderKpis() {
   let remainTone = "";
   if (budget) remainTone = remaining < 0 ? "danger" : remaining < budget * 0.2 ? "warn" : "ok";
 
+  const yestSpent = expenseTotal(
+    state.entries.filter((e) => !e.deleted && e.date === LedgerCore.shiftIso(today, -1)),
+  );
   document.getElementById("kpis").innerHTML = `
     <div class="kpi"><div class="value">${formatMoney(spent)}</div><div class="label">Spent · ${monthLabel(state.selectedMonth)}</div>${delta != null ? `<div class="delta">${delta >= 0 ? "+" : ""}${delta.toFixed(0)}% vs last month</div>` : ""}</div>
-    <div class="kpi"><div class="value">${formatMoney(today.startsWith(prefix) ? todaySpent : 0)}</div><div class="label">Spent today</div><div class="delta">${loggingStreak()} day log streak</div></div>
+    <div class="kpi"><div class="value">${formatMoney(today.startsWith(prefix) ? todaySpent : 0)}</div><div class="label">Spent today</div><div class="delta">${loggingStreak()} day streak · yesterday ${formatMoney(yestSpent)}</div></div>
     <div class="kpi"><div class="value">${formatMoney(LedgerCore.trailingSpend(state.entries, today, 7))}</div><div class="label">Last 7 days</div><div class="delta">${formatMoney(avg)} / day this month</div></div>
     <div class="kpi ${remainTone}"><div class="value">${budget ? formatMoney(remaining) : formatMoney(net)}</div><div class="label">${budget ? "Budget remaining" : "Net spend"}</div>${income ? `<div class="delta">${formatMoney(income)} in refunds</div>` : ""}</div>
   `;
@@ -1596,8 +1600,8 @@ function bind() {
       recurringId: src.recurringId,
     });
   };
-  document.getElementById("amount-down").onclick = () => nudgeAmount(-1);
-  document.getElementById("amount-up").onclick = () => nudgeAmount(1);
+  document.getElementById("amount-down").onclick = (e) => nudgeAmount(-1, e);
+  document.getElementById("amount-up").onclick = (e) => nudgeAmount(1, e);
   document.getElementById("entry-form").onsubmit = (e) => {
     e.preventDefault();
     const saveBtn = document.getElementById("modal-save");
