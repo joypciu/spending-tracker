@@ -62,13 +62,24 @@ function sampleEntries() {
 }
 
 function loadSampleEntries() {
-  const live = state.entries.some((e) => !e.deleted);
-  if (live && !confirm("Add three sample purchases for today and yesterday? Existing rows stay.")) return;
-  state.entries = state.entries.concat(sampleEntries());
-  bumpMeta();
-  saveState();
-  render();
-  toast("Sample purchases added");
+  const apply = () => {
+    state.entries = state.entries.concat(sampleEntries());
+    bumpMeta();
+    saveState();
+    render();
+    toast("Sample purchases added");
+  };
+  if (state.entries.some((e) => !e.deleted)) {
+    askConfirm({
+      title: "Add sample purchases?",
+      body: "Three generic rows for today and yesterday. Existing rows stay.",
+      yes: "Add samples",
+      no: "Cancel",
+      onYes: apply,
+    });
+    return;
+  }
+  apply();
 }
 
 let remindTimer = null;
@@ -78,6 +89,7 @@ let calendarFollow = true;
 let idleLockTimer = null;
 let editingId = null;
 let toastTimer = null;
+let confirmAction = null;
 let state = loadState();
 
 function categories() {
@@ -412,11 +424,39 @@ function snapshotModal() {
   ].join("\0");
 }
 
+function askConfirm({ title, body, yes, no, onYes }) {
+  const box = document.getElementById("confirm-dialog");
+  if (!box) {
+    if (window.confirm(title)) onYes();
+    return;
+  }
+  document.getElementById("confirm-title").textContent = title;
+  document.getElementById("confirm-body").textContent = body || "";
+  document.getElementById("confirm-yes").textContent = yes || "OK";
+  document.getElementById("confirm-no").textContent = no || "Cancel";
+  confirmAction = onYes;
+  if (!box.open) box.showModal();
+}
+
+function closeConfirm() {
+  const box = document.getElementById("confirm-dialog");
+  confirmAction = null;
+  if (box?.open) box.close();
+}
+
 function closeModal(force) {
   const dialog = document.getElementById("entry-modal");
   if (!force && dialog.open && snapshotModal() !== modalSnap) {
-    if (!window.confirm("Discard this entry?")) return false;
+    askConfirm({
+      title: "Discard this entry?",
+      body: "Unsaved changes will be lost.",
+      yes: "Discard",
+      no: "Keep editing",
+      onYes: () => closeModal(true),
+    });
+    return false;
   }
+  closeConfirm();
   dialog.close();
   editingId = null;
   saveEntryFromForm._force = false;
@@ -1255,6 +1295,7 @@ function lockNow() {
   }
   const modal = document.getElementById("entry-modal");
   if (modal?.open) closeModal(true);
+  closeConfirm();
   const pal = document.getElementById("palette");
   if (pal?.open) pal.close();
   showLockGate();
@@ -1668,6 +1709,20 @@ function bind() {
     e.preventDefault();
     closeModal();
   };
+  document.getElementById("confirm-form").onsubmit = (e) => {
+    e.preventDefault();
+    const fn = confirmAction;
+    closeConfirm();
+    if (fn) fn();
+  };
+  document.getElementById("confirm-no").onclick = (e) => {
+    e.preventDefault();
+    closeConfirm();
+  };
+  document.getElementById("confirm-dialog").addEventListener("cancel", (e) => {
+    e.preventDefault();
+    closeConfirm();
+  });
   document.getElementById("modal-duplicate").onclick = (e) => {
     e.preventDefault();
     const src = editingId ? state.entries.find((x) => x.id === editingId) : null;

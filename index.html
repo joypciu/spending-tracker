@@ -328,6 +328,18 @@
     <ul id="palette-list" class="palette-list"></ul>
   </dialog>
 
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <form id="confirm-form">
+      <h2 id="confirm-title">Are you sure?</h2>
+      <p id="confirm-body" class="caption"></p>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button type="button" class="ghost" id="confirm-no">Cancel</button>
+        <button type="submit" class="primary" id="confirm-yes">OK</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="entry-modal" aria-labelledby="modal-title">
     <form id="entry-form" method="dialog">
       <h2 id="modal-title">Add expense</h2>

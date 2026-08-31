@@ -521,7 +521,7 @@ td { max-width: 280px; overflow-wrap: anywhere; }
     margin: 0;
     border: 0;
   }
-  #entry-form { padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
+  #entry-form, #confirm-form { padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
   .modal-actions { flex-wrap: wrap; }
   .chip { min-height: 36px; }
 }
@@ -568,7 +568,7 @@ dialog {
   width: min(560px, calc(100vw - 32px));
 }
 dialog::backdrop { background: var(--overlay); }
-#entry-form { padding: 18px 18px 14px; }
+#entry-form, #confirm-form { padding: 18px 18px 14px; }
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

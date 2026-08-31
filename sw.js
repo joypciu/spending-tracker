@@ -1,4 +1,4 @@
-const CACHE = "spending-tracker-v24";
+const CACHE = "spending-tracker-v25";
 const ASSETS = [
   "./",
   "./index.html",
