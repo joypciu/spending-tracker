@@ -1609,6 +1609,12 @@ function bind() {
     saveState();
     renderLedger();
   };
+  document.getElementById("search").onkeydown = (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const first = filteredLedger()[0];
+    if (first) openModal(first);
+  };
   document.getElementById("filter-category").onchange = (e) => {
     state.filterCategory = e.target.value;
     saveState();
@@ -1993,16 +1999,31 @@ function bind() {
     palette.close();
     if (cmd) cmd.run();
   }
+  function movePalette(delta) {
+    const btns = [...paletteList.querySelectorAll("[data-cmd]")];
+    if (!btns.length) return;
+    let i = btns.findIndex((b) => b.classList.contains("active"));
+    if (i < 0) i = 0;
+    else i = (i + delta + btns.length) % btns.length;
+    btns.forEach((b, n) => b.classList.toggle("active", n === i));
+    btns[i].scrollIntoView({ block: "nearest" });
+  }
   paletteQ.oninput = renderPalette;
   paletteList.onclick = (e) => {
     const btn = e.target.closest("[data-cmd]");
     if (btn) runPalette(btn.dataset.cmd);
   };
   paletteQ.onkeydown = (e) => {
-    if (e.key === "Enter") {
+    if (e.key === "ArrowDown") {
       e.preventDefault();
-      const first = paletteList.querySelector("[data-cmd]");
-      if (first) runPalette(first.dataset.cmd);
+      movePalette(1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      movePalette(-1);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const active = paletteList.querySelector("[data-cmd].active") || paletteList.querySelector("[data-cmd]");
+      if (active) runPalette(active.dataset.cmd);
     }
   };
 
