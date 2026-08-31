@@ -73,6 +73,7 @@ const LedgerSync = (() => {
       dailyCap: state.dailyCap,
       currency: state.currency,
       weekStart: state.weekStart,
+      locale: state.locale,
       categoryCaps: state.categoryCaps,
       customCategories: state.customCategories,
       customMethods: state.customMethods,
@@ -95,6 +96,7 @@ const LedgerSync = (() => {
       dailyCap: useRemoteMeta ? remote.dailyCap : local.dailyCap,
       currency: useRemoteMeta ? remote.currency : local.currency,
       weekStart: useRemoteMeta ? remote.weekStart : local.weekStart,
+      locale: useRemoteMeta ? remote.locale : local.locale,
       categoryCaps: useRemoteMeta
         ? { ...local.categoryCaps, ...remote.categoryCaps }
         : { ...remote.categoryCaps, ...local.categoryCaps },
@@ -122,6 +124,7 @@ const LedgerSync = (() => {
     state.dailyCap = doc.dailyCap ?? state.dailyCap;
     state.currency = doc.currency || state.currency;
     if (doc.weekStart != null) state.weekStart = doc.weekStart;
+    if (doc.locale) state.locale = doc.locale;
     state.categoryCaps = doc.categoryCaps || {};
     state.customCategories = doc.customCategories || state.customCategories || [];
     state.customMethods = doc.customMethods || state.customMethods || [];

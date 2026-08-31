@@ -17,6 +17,7 @@ const DEFAULTS = {
   dailyCap: "",
   currency: "৳",
   weekStart: 6,
+  locale: "bn-BD",
   density: "comfortable",
   theme: "dark",
   remindEnabled: false,
@@ -81,9 +82,13 @@ function currentMonthKey() {
   return todayIso().slice(0, 7);
 }
 
+function uiLocale() {
+  return state.locale === "en-US" ? "en-US" : "bn-BD";
+}
+
 function monthLabel(key) {
   const [y, m] = key.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
+  return new Date(y, m - 1, 1).toLocaleString(uiLocale(), { month: "long", year: "numeric" });
 }
 
 function formatMoney(n, symbol = state.currency) {
@@ -813,7 +818,7 @@ function renderDayPanel() {
   const income = incomeTotal(items);
   const net = spent - income;
   const pretty = iso
-    ? new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", {
+    ? new Date(`${iso}T12:00:00`).toLocaleDateString(uiLocale(), {
         weekday: "long",
         month: "long",
         day: "numeric",
@@ -1042,6 +1047,7 @@ function renderSettings() {
   document.getElementById("daily-cap").value = state.dailyCap;
   document.getElementById("currency").value = state.currency;
   document.getElementById("week-start").value = String(state.weekStart ?? 6);
+  document.getElementById("date-locale").value = state.locale === "en-US" ? "en-US" : "bn-BD";
   document.getElementById("theme-light").checked = state.theme === "light";
   document.getElementById("density-compact").checked = state.density === "compact";
   document.getElementById("remind-enabled").checked = !!state.remindEnabled;
@@ -1081,6 +1087,7 @@ function renderSettings() {
 
 function render() {
   document.documentElement.dataset.theme = state.theme === "light" ? "light" : "dark";
+  document.documentElement.lang = uiLocale() === "bn-BD" ? "bn" : "en";
   document.documentElement.dataset.density = state.density === "compact" ? "compact" : "comfortable";
   document.querySelector('meta[name="theme-color"]').content = state.theme === "light" ? "#f4f2ee" : "#0f1114";
   document.getElementById("month-btn").textContent = monthLabel(state.selectedMonth);
@@ -1476,6 +1483,12 @@ function bind() {
     saveState();
     render();
   };
+  document.getElementById("date-locale").onchange = (e) => {
+    state.locale = e.target.value;
+    bumpMeta();
+    saveState();
+    render();
+  };
   document.getElementById("theme-light").onchange = (e) => {
     state.theme = e.target.checked ? "light" : "dark";
     saveState();
@@ -1861,6 +1874,12 @@ function bind() {
       document.getElementById("entry-modal").open ||
       document.getElementById("palette").open ||
       document.getElementById("lock-gate")?.open;
+    if (!blocked && !e.altKey && !e.ctrlKey && !e.metaKey && ["1", "2", "3", "4"].includes(e.key)) {
+      e.preventDefault();
+      state.view = ["overview", "ledger", "insights", "settings"][Number(e.key) - 1];
+      saveState();
+      render();
+    }
     if (!blocked && state.view === "overview" && !e.altKey && !e.ctrlKey && !e.metaKey) {
       if (e.key === "ArrowLeft") {
         e.preventDefault();
