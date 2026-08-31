@@ -970,10 +970,11 @@ function renderDayPanel() {
               <div class="meta">${e.category} · ${e.method}${e.type === "income" ? " · refund" : ""}</div>
             </div>
             <div class="${e.type === "income" ? "income" : ""}">${e.type === "income" ? "+" : ""}${formatMoney(e.amount)}</div>
+            <button type="button" class="icon" data-del="${e.id}" aria-label="Remove ${escapeHtml(e.note || e.category)}">×</button>
           </li>`,
         )
         .join("")
-    : `<li><div class="meta">Nothing logged. Add the first purchase for this day.</div></li>`;
+    : `<li class="empty-card"><div class="meta">Nothing logged for this day.</div><button type="button" class="link" data-day-add>Add one</button></li>`;
 }
 
 function filtersActive() {
@@ -1591,6 +1592,15 @@ function bind() {
   };
 
   document.getElementById("day-panel-list").onclick = (e) => {
+    if (e.target.closest("[data-day-add]")) {
+      openModal({ date: state.selectedDate || todayIso() });
+      return;
+    }
+    const del = e.target.closest("[data-del]");
+    if (del) {
+      removeEntry(del.dataset.del);
+      return;
+    }
     const edit = e.target.closest("[data-edit]");
     if (edit) {
       const entry = state.entries.find((x) => x.id === edit.dataset.edit);
