@@ -16,6 +16,7 @@ const DEFAULTS = {
   budgetsByMonth: {},
   dailyCap: "",
   currency: "৳",
+  weekStart: 6,
   density: "comfortable",
   theme: "dark",
   remindEnabled: false,
@@ -781,8 +782,8 @@ function renderCalendar() {
   const today = todayIso();
   const cap = Number.parseFloat(state.dailyCap);
   const hasCap = Number.isFinite(cap) && cap > 0;
-  const first = new Date(year, month - 1, 1).getDay();
-  let html = WEEKDAYS.map((w) => `<div class="dow">${w}</div>`).join("");
+  const first = LedgerCore.gridOffset(new Date(year, month - 1, 1).getDay(), state.weekStart);
+  let html = LedgerCore.rotateWeekdays(WEEKDAYS, state.weekStart).map((w) => `<div class="dow">${w}</div>`).join("");
   for (let i = 0; i < first; i++) html += `<div></div>`;
   for (let d = 1; d <= dayCount; d++) {
     const iso = `${state.selectedMonth}-${pad2(d)}`;
@@ -1040,6 +1041,7 @@ function renderSettings() {
   document.getElementById("budget").value = state.budgetsByMonth[state.selectedMonth] ?? state.monthlyBudget;
   document.getElementById("daily-cap").value = state.dailyCap;
   document.getElementById("currency").value = state.currency;
+  document.getElementById("week-start").value = String(state.weekStart ?? 6);
   document.getElementById("theme-light").checked = state.theme === "light";
   document.getElementById("density-compact").checked = state.density === "compact";
   document.getElementById("remind-enabled").checked = !!state.remindEnabled;
@@ -1468,6 +1470,12 @@ function bind() {
     saveState();
     render();
   };
+  document.getElementById("week-start").onchange = (e) => {
+    state.weekStart = Number(e.target.value);
+    bumpMeta();
+    saveState();
+    render();
+  };
   document.getElementById("theme-light").onchange = (e) => {
     state.theme = e.target.checked ? "light" : "dark";
     saveState();
@@ -1885,7 +1893,20 @@ function bind() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator) || location.protocol === "file:") return;
-  navigator.serviceWorker.register("sw.js").catch(() => {});
+  navigator.serviceWorker
+    .register("sw.js")
+    .then((reg) => {
+      reg.addEventListener("updatefound", () => {
+        const worker = reg.installing;
+        if (!worker) return;
+        worker.addEventListener("statechange", () => {
+          if (worker.state === "installed" && navigator.serviceWorker.controller) {
+            toast("New Ledger version ready", "Reload", () => location.reload());
+          }
+        });
+      });
+    })
+    .catch(() => {});
 }
 
 bind();

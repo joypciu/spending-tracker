@@ -12,8 +12,14 @@ const LedgerCore = (() => {
   ];
   const METHODS = ["Cash", "bKash", "Nagad", "Card", "Bank", "Other"];
 
-  function pad2(n) {
-    return n < 10 ? `0${n}` : String(n);
+  function rotateWeekdays(days, start) {
+    const s = ((Number(start) % 7) + 7) % 7;
+    return days.slice(s).concat(days.slice(0, s));
+  }
+
+  function gridOffset(jsWeekday, start) {
+    const s = ((Number(start) % 7) + 7) % 7;
+    return (jsWeekday - s + 7) % 7;
   }
 
   function shiftIso(iso, deltaDays) {
@@ -245,6 +251,8 @@ const LedgerCore = (() => {
     BASE_CATEGORIES,
     METHODS,
     pad2,
+    rotateWeekdays,
+    gridOffset,
     shiftMonth,
     shiftIso,
     trailingSpend,

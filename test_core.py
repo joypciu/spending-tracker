@@ -84,6 +84,10 @@ def pending_recurring(entries, month, skipped=None):
 
 def main() -> None:
     assert shift_month("2026-01", -1) == "2025-12"
+    assert [6, 0, 1, 2, 3, 4, 5][0] == 6
+    days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    sat = days[6:] + days[:6]
+    assert sat[0] == "Sat"
     assert shift_iso("2026-08-31", 1) == "2026-09-01"
     assert shift_iso("2026-09-01", -1) == "2026-08-31"
     assert 800 - 95 == 705
