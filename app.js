@@ -1190,6 +1190,16 @@ function showLockGate() {
   const gate = document.getElementById("lock-gate");
   if (!gate || pinUnlocked()) return;
   if (!gate.open) gate.showModal();
+  const pin = document.getElementById("unlock-pin");
+  const err = document.getElementById("unlock-error");
+  if (err) {
+    err.hidden = true;
+    err.textContent = "";
+  }
+  if (pin) {
+    pin.value = "";
+    requestAnimationFrame(() => pin.focus());
+  }
 }
 
 function hideLockGate() {
