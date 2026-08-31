@@ -356,7 +356,15 @@ th { font-size: 12px; color: var(--muted); font-weight: 500; background: var(--b
 tr:nth-child(even) td { background: var(--row-alt); }
 tr[data-id] { cursor: pointer; }
 tr[data-id]:hover td { background: var(--fill); }
-.num { text-align: right; font-variant-numeric: tabular-nums; }
+td { max-width: 280px; overflow-wrap: anywhere; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; max-width: none; }
+
+[data-density="compact"] .kpi { padding: 8px 10px; }
+[data-density="compact"] .kpi .value { font-size: 18px; }
+[data-density="compact"] .day { min-height: 56px; padding: 5px; }
+[data-density="compact"] th, [data-density="compact"] td { padding: 6px 8px; }
+[data-density="compact"] .ledger-cards li { padding: 8px; }
+[data-density="compact"] main { padding-top: 12px; }
 .th {
   border: 0;
   background: none;

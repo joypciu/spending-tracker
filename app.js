@@ -16,6 +16,7 @@ const DEFAULTS = {
   budgetsByMonth: {},
   dailyCap: "",
   currency: "৳",
+  density: "comfortable",
   theme: "dark",
   remindEnabled: false,
   lastRemindDate: "",
@@ -362,6 +363,9 @@ function closeModal() {
 }
 
 function saveEntryFromForm() {
+  if (saveEntryFromForm._busy) return false;
+  saveEntryFromForm._busy = true;
+  try {
   const amount = Number.parseFloat(document.getElementById("amount").value);
   const date = document.getElementById("date").value;
   if (!Number.isFinite(amount) || amount <= 0 || !date) return false;
@@ -419,6 +423,9 @@ function saveEntryFromForm() {
   state.selectedDate = date;
   saveState();
   return true;
+  } finally {
+    saveEntryFromForm._busy = false;
+  }
 }
 
 function restoreUndo() {
@@ -985,6 +992,7 @@ function renderSettings() {
   document.getElementById("daily-cap").value = state.dailyCap;
   document.getElementById("currency").value = state.currency;
   document.getElementById("theme-light").checked = state.theme === "light";
+  document.getElementById("density-compact").checked = state.density === "compact";
   document.getElementById("remind-enabled").checked = !!state.remindEnabled;
   document.getElementById("sync-enabled").checked = !!state.syncEnabled;
   document.getElementById("sync-url").value = state.syncUrl || "";
@@ -1022,6 +1030,7 @@ function renderSettings() {
 
 function render() {
   document.documentElement.dataset.theme = state.theme === "light" ? "light" : "dark";
+  document.documentElement.dataset.density = state.density === "compact" ? "compact" : "comfortable";
   document.querySelector('meta[name="theme-color"]').content = state.theme === "light" ? "#f4f2ee" : "#0f1114";
   document.getElementById("month-btn").textContent = monthLabel(state.selectedMonth);
   const monthPick = document.getElementById("month-pick");
@@ -1415,6 +1424,11 @@ function bind() {
     saveState();
     render();
   };
+  document.getElementById("density-compact").onchange = (e) => {
+    state.density = e.target.checked ? "compact" : "comfortable";
+    saveState();
+    render();
+  };
   document.getElementById("remind-enabled").onchange = async (e) => {
     if (e.target.checked) {
       const ok = await enableReminders();
@@ -1499,9 +1513,15 @@ function bind() {
   };
   document.getElementById("entry-form").onsubmit = (e) => {
     e.preventDefault();
-    if (saveEntryFromForm()) {
-      closeModal();
-      render();
+    const saveBtn = document.getElementById("modal-save");
+    saveBtn.disabled = true;
+    try {
+      if (saveEntryFromForm()) {
+        closeModal();
+        render();
+      }
+    } finally {
+      saveBtn.disabled = false;
     }
   };
   document.getElementById("amount-chips").onclick = (e) => {
@@ -1680,6 +1700,7 @@ function bind() {
     { id: "sync", label: "Sync now", run: () => syncNow() },
     { id: "export", label: "Export JSON backup", run: exportJson },
     { id: "theme", label: "Toggle light theme", run: () => { state.theme = state.theme === "light" ? "dark" : "light"; saveState(); render(); } },
+    { id: "compact", label: "Toggle compact layout", run: () => { state.density = state.density === "compact" ? "comfortable" : "compact"; saveState(); render(); } },
   ];
   function renderPalette() {
     const q = (paletteQ.value || "").toLowerCase();
