@@ -84,11 +84,41 @@ function monthLabel(key) {
 }
 
 function formatMoney(n, symbol = state.currency) {
+  const whole = Math.abs(n - Math.round(n)) < 0.005;
   const abs = Math.abs(n).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
+    minimumFractionDigits: whole ? 0 : 2,
     maximumFractionDigits: 2,
   });
   return n < 0 ? `-${symbol}${abs}` : `${symbol}${abs}`;
+}
+
+function highlightQuery(text, q) {
+  const raw = String(text ?? "");
+  const query = (q || "").trim();
+  if (!query) return escapeHtml(raw);
+  const out = [];
+  const lower = raw.toLowerCase();
+  const needle = query.toLowerCase();
+  let i = 0;
+  while (i < raw.length) {
+    const at = lower.indexOf(needle, i);
+    if (at < 0) {
+      out.push(escapeHtml(raw.slice(i)));
+      break;
+    }
+    out.push(escapeHtml(raw.slice(i, at)));
+    out.push(`<mark>${escapeHtml(raw.slice(at, at + needle.length))}</mark>`);
+    i = at + needle.length;
+  }
+  return out.join("");
+}
+
+function jumpSelectedDay(delta) {
+  const next = LedgerCore.shiftIso(state.selectedDate || todayIso(), delta);
+  state.selectedDate = next;
+  state.selectedMonth = next.slice(0, 7);
+  saveState();
+  render();
 }
 
 function newId() {
@@ -616,7 +646,7 @@ function renderKpis() {
   document.getElementById("kpis").innerHTML = `
     <div class="kpi"><div class="value">${formatMoney(spent)}</div><div class="label">Spent · ${monthLabel(state.selectedMonth)}</div>${delta != null ? `<div class="delta">${delta >= 0 ? "+" : ""}${delta.toFixed(0)}% vs last month</div>` : ""}</div>
     <div class="kpi"><div class="value">${formatMoney(today.startsWith(prefix) ? todaySpent : 0)}</div><div class="label">Spent today</div><div class="delta">${loggingStreak()} day log streak</div></div>
-    <div class="kpi"><div class="value">${formatMoney(avg)}</div><div class="label">Average / day so far</div></div>
+    <div class="kpi"><div class="value">${formatMoney(LedgerCore.trailingSpend(state.entries, today, 7))}</div><div class="label">Last 7 days</div><div class="delta">${formatMoney(avg)} / day this month</div></div>
     <div class="kpi ${remainTone}"><div class="value">${budget ? formatMoney(remaining) : formatMoney(net)}</div><div class="label">${budget ? "Budget remaining" : "Net spend"}</div>${income ? `<div class="delta">${formatMoney(income)} in refunds</div>` : ""}</div>
   `;
   renderWallets();
@@ -739,7 +769,7 @@ function renderDayPanel() {
         .map(
           (e) => `<li>
             <div>
-              <button type="button" class="link" data-edit="${e.id}">${escapeHtml(e.note || e.category)}</button>
+              <button type="button" class="link" data-edit="${e.id}">${highlightQuery(e.note || e.category, state.search)}</button>
               <div class="meta">${e.category} · ${e.method}${e.type === "income" ? " · refund" : ""}</div>
             </div>
             <div class="${e.type === "income" ? "income" : ""}">${e.type === "income" ? "+" : ""}${formatMoney(e.amount)}</div>
@@ -759,7 +789,7 @@ function renderLedger() {
         <td>${e.date}</td>
         <td><span class="tag">${e.category}</span></td>
         <td>${e.method}</td>
-        <td>${escapeHtml(e.note || "—")}</td>
+        <td>${highlightQuery(e.note || "—", state.search)}</td>
         <td class="num ${e.type === "income" ? "income" : ""}">${e.type === "income" ? "+" : ""}${formatMoney(e.amount)}</td>
         <td><button type="button" class="icon" data-del="${e.id}" aria-label="Remove ${escapeHtml(e.note || e.category)}">×</button></td>
       </tr>`,
@@ -772,7 +802,7 @@ function renderLedger() {
     ? rows
         .map(
           (e) => `<li data-id="${e.id}">
-        <button type="button" class="link" data-edit="${e.id}">${escapeHtml(e.note || e.category)}</button>
+        <button type="button" class="link" data-edit="${e.id}">${highlightQuery(e.note || e.category, state.search)}</button>
         <div class="amt ${e.type === "income" ? "income" : ""}">${e.type === "income" ? "+" : ""}${formatMoney(e.amount)}</div>
         <div class="sub">${e.date} · ${e.category} · ${e.method}</div>
         <button type="button" class="icon" data-del="${e.id}" aria-label="Remove ${escapeHtml(e.note || e.category)}">×</button>
@@ -1673,6 +1703,32 @@ function bind() {
     }
     if (e.key === "Escape" && palette.open) palette.close();
     if (e.key === "Escape" && document.getElementById("entry-modal").open) closeModal();
+    const blocked =
+      typing ||
+      document.getElementById("entry-modal").open ||
+      document.getElementById("palette").open ||
+      document.getElementById("lock-gate")?.open;
+    if (!blocked && state.view === "overview" && !e.altKey && !e.ctrlKey && !e.metaKey) {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        jumpSelectedDay(-1);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        jumpSelectedDay(1);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        jumpSelectedDay(-7);
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        jumpSelectedDay(7);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        openModal({ date: state.selectedDate || todayIso() });
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        document.getElementById("jump-today").click();
+      }
+    }
     if (!typing && e.key === "ArrowLeft" && e.altKey) {
       document.getElementById("prev-month").click();
     }

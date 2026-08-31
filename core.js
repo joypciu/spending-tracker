@@ -16,6 +16,26 @@ const LedgerCore = (() => {
     return n < 10 ? `0${n}` : String(n);
   }
 
+  function shiftIso(iso, deltaDays) {
+    const d = new Date(`${iso}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return iso;
+    d.setDate(d.getDate() + deltaDays);
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  }
+
+  function trailingSpend(entries, endIso, days) {
+    const end = new Date(`${endIso}T12:00:00`);
+    if (Number.isNaN(end.getTime())) return 0;
+    let sum = 0;
+    for (const e of entries || []) {
+      if (e.deleted || e.type === "income" || !e.date) continue;
+      const d = new Date(`${e.date}T12:00:00`);
+      const diff = (end - d) / 86400000;
+      if (diff >= 0 && diff < days) sum += Number(e.amount || 0);
+    }
+    return sum;
+  }
+
   function shiftMonth(key, delta) {
     const [y, m] = key.split("-").map(Number);
     const d = new Date(y, m - 1 + delta, 1);
@@ -220,6 +240,8 @@ const LedgerCore = (() => {
     METHODS,
     pad2,
     shiftMonth,
+    shiftIso,
+    trailingSpend,
     daysInMonth,
     expenseTotal,
     incomeTotal,

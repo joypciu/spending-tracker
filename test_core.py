@@ -1,9 +1,15 @@
 """Mirror of core.js checks so the suite runs without Node."""
-from datetime import date
+from datetime import date, timedelta
 
 
 def pad2(n: int) -> str:
     return f"0{n}" if n < 10 else str(n)
+
+
+def shift_iso(iso: str, delta: int) -> str:
+    y, m, d = map(int, iso.split("-"))
+    nxt = date(y, m, d) + timedelta(days=delta)
+    return f"{nxt.year}-{pad2(nxt.month)}-{pad2(nxt.day)}"
 
 
 def shift_month(key: str, delta: int) -> str:
@@ -78,6 +84,8 @@ def pending_recurring(entries, month, skipped=None):
 
 def main() -> None:
     assert shift_month("2026-01", -1) == "2025-12"
+    assert shift_iso("2026-08-31", 1) == "2026-09-01"
+    assert shift_iso("2026-09-01", -1) == "2026-08-31"
     assert shift_month("2026-08", 1) == "2026-09"
     assert days_in_month(2026, 2) == 28
     entries = [
