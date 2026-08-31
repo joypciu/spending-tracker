@@ -795,6 +795,35 @@ function renderDayPanel() {
     : `<li><div class="meta">Nothing logged. Add the first purchase for this day.</div></li>`;
 }
 
+function filtersActive() {
+  return !!(
+    (state.search || "").trim() ||
+    state.filterCategory !== "all" ||
+    state.filterMethod !== "all" ||
+    state.filterType !== "all" ||
+    state.searchAllMonths
+  );
+}
+
+function clearFilters() {
+  state.search = "";
+  state.filterCategory = "all";
+  state.filterMethod = "all";
+  state.filterType = "all";
+  state.searchAllMonths = false;
+  saveState();
+  render();
+}
+
+function renderSortHeaders() {
+  for (const btn of document.querySelectorAll("#view-ledger [data-sort]")) {
+    const on = btn.dataset.sort === state.sortKey;
+    const label = btn.dataset.label || btn.dataset.sort;
+    btn.setAttribute("aria-sort", on ? (state.sortDir === "asc" ? "ascending" : "descending") : "none");
+    btn.textContent = on ? `${label} ${state.sortDir === "asc" ? "↑" : "↓"}` : label;
+  }
+}
+
 function renderLedger() {
   const rows = filteredLedger();
   const spent = expenseTotal(rows);
@@ -826,6 +855,9 @@ function renderLedger() {
         )
         .join("")
     : `<li class="empty-card"><div class="meta">No matching rows. Clear filters or add an expense.</div></li>`;
+  const clearBtn = document.getElementById("clear-filters");
+  if (clearBtn) clearBtn.hidden = !filtersActive();
+  renderSortHeaders();
 }
 
 function renderInsights() {
@@ -1346,6 +1378,7 @@ function bind() {
     saveState();
     renderLedger();
   };
+  document.getElementById("clear-filters").onclick = clearFilters;
   document.querySelector("#view-ledger thead").onclick = (e) => {
     const btn = e.target.closest("[data-sort]");
     if (!btn) return;
@@ -1639,6 +1672,7 @@ function bind() {
     { id: "add", label: "Add expense", run: () => openModal({ date: state.selectedDate || todayIso() }) },
     { id: "overview", label: "Go to Overview", run: () => { state.view = "overview"; saveState(); render(); } },
     { id: "ledger", label: "Go to Ledger", run: () => { state.view = "ledger"; saveState(); render(); } },
+    { id: "clear", label: "Clear ledger filters", run: clearFilters },
     { id: "insights", label: "Go to Insights", run: () => { state.view = "insights"; saveState(); render(); } },
     { id: "settings", label: "Go to Settings", run: () => { state.view = "settings"; saveState(); render(); } },
     { id: "repeat", label: "Repeat last expense", run: repeatLast },
@@ -1734,6 +1768,10 @@ function bind() {
     }
     if (e.key === "Escape" && palette.open) palette.close();
     if (e.key === "Escape" && document.getElementById("entry-modal").open) closeModal();
+    if (e.key === "Escape" && !typing && state.view === "ledger" && filtersActive()) {
+      e.preventDefault();
+      clearFilters();
+    }
     const blocked =
       typing ||
       document.getElementById("entry-modal").open ||

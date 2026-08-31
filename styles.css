@@ -349,10 +349,10 @@ input, select {
   color: var(--text);
 }
 
-.table-wrap { overflow-x: auto; border: 1px solid var(--line); }
+.table-wrap { overflow: auto; border: 1px solid var(--line); max-height: min(70vh, 720px); }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--line); }
-th { font-size: 12px; color: var(--muted); font-weight: 500; background: var(--bg-2); }
+th { font-size: 12px; color: var(--muted); font-weight: 500; background: var(--bg-2); position: sticky; top: 0; z-index: 1; }
 tr:nth-child(even) td { background: var(--row-alt); }
 tr[data-id] { cursor: pointer; }
 tr[data-id]:hover td { background: var(--fill); }

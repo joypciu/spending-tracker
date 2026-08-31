@@ -120,6 +120,7 @@
           <input type="checkbox" id="search-all" />
           All months
         </label>
+        <button type="button" class="ghost" id="clear-filters" hidden>Clear filters</button>
         <button type="button" class="ghost" id="export-csv">Export CSV</button>
       </div>
       <p class="caption" id="ledger-meta"></p>
@@ -129,11 +130,11 @@
           <caption class="sr-only">Purchases this month</caption>
           <thead>
             <tr>
-              <th scope="col"><button type="button" class="th" data-sort="date">Date</button></th>
-              <th scope="col"><button type="button" class="th" data-sort="category">Category</button></th>
-              <th scope="col"><button type="button" class="th" data-sort="method">Method</button></th>
-              <th scope="col"><button type="button" class="th" data-sort="note">Note</button></th>
-              <th scope="col" class="num"><button type="button" class="th" data-sort="amount">Amount</button></th>
+              <th scope="col"><button type="button" class="th" data-sort="date" data-label="Date">Date</button></th>
+              <th scope="col"><button type="button" class="th" data-sort="category" data-label="Category">Category</button></th>
+              <th scope="col"><button type="button" class="th" data-sort="method" data-label="Method">Method</button></th>
+              <th scope="col"><button type="button" class="th" data-sort="note" data-label="Note">Note</button></th>
+              <th scope="col" class="num"><button type="button" class="th" data-sort="amount" data-label="Amount">Amount</button></th>
               <th scope="col"><span class="sr-only">Remove</span></th>
             </tr>
           </thead>
