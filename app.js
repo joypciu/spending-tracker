@@ -61,6 +61,7 @@ const SEED_ENTRIES = [
 let remindTimer = null;
 let undo = null;
 let modalSnap = "";
+let calendarFollow = true;
 let editingId = null;
 let toastTimer = null;
 let state = loadState();
@@ -125,6 +126,7 @@ function jumpSelectedDay(delta) {
   const next = LedgerCore.shiftIso(state.selectedDate || todayIso(), delta);
   state.selectedDate = next;
   state.selectedMonth = next.slice(0, 7);
+  calendarFollow = true;
   saveState();
   render();
 }
@@ -809,7 +811,10 @@ function renderCalendar() {
   document.getElementById("calendar").innerHTML = html;
   document.getElementById("cal-title").textContent = monthLabel(state.selectedMonth);
   const selectedDay = document.querySelector("#calendar .day.selected");
-  if (selectedDay) selectedDay.scrollIntoView({ block: "nearest", inline: "nearest" });
+  if (calendarFollow && state.view === "overview" && selectedDay) {
+    selectedDay.scrollIntoView({ block: "nearest", inline: "nearest" });
+    calendarFollow = false;
+  }
 }
 
 function renderDayPanel() {
@@ -1333,12 +1338,14 @@ function bind() {
   document.getElementById("prev-month").onclick = () => {
     state.selectedMonth = shiftMonth(state.selectedMonth, -1);
     state.selectedDate = `${state.selectedMonth}-01`;
+    calendarFollow = true;
     saveState();
     render();
   };
   document.getElementById("next-month").onclick = () => {
     state.selectedMonth = shiftMonth(state.selectedMonth, 1);
     state.selectedDate = `${state.selectedMonth}-01`;
+    calendarFollow = true;
     saveState();
     render();
   };
@@ -1352,6 +1359,7 @@ function bind() {
     if (!e.target.value) return;
     state.selectedMonth = e.target.value;
     state.selectedDate = `${state.selectedMonth}-01`;
+    calendarFollow = true;
     saveState();
     render();
   };
@@ -1359,6 +1367,7 @@ function bind() {
     state.selectedMonth = currentMonthKey();
     state.selectedDate = todayIso();
     state.view = "overview";
+    calendarFollow = true;
     saveState();
     render();
   };
@@ -1381,6 +1390,7 @@ function bind() {
     const btn = e.target.closest("[data-iso]");
     if (!btn) return;
     state.selectedDate = btn.dataset.iso;
+    calendarFollow = true;
     saveState();
     render();
   });
