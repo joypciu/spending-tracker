@@ -38,6 +38,8 @@ const DEFAULTS = {
   idleLockMinutes: 5,
   startingBalances: {},
   nagDismissedDate: "",
+  lastCategory: "Food",
+  lastMethod: "Cash",
   searchAllMonths: false,
   entries: [],
   syncEnabled: false,
@@ -102,6 +104,23 @@ function uiLocale() {
 function monthLabel(key) {
   const [y, m] = key.split("-").map(Number);
   return new Date(y, m - 1, 1).toLocaleString(uiLocale(), { month: "long", year: "numeric" });
+}
+
+function formatIsoDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  const thisYear = iso.startsWith(`${new Date().getFullYear()}-`);
+  return d.toLocaleDateString(uiLocale(), {
+    month: "short",
+    day: "numeric",
+    year: thisYear ? undefined : "numeric",
+  });
+}
+
+function pickNamed(list, preferred, fallback) {
+  if (preferred && list.includes(preferred)) return preferred;
+  return fallback;
 }
 
 function formatMoney(n, symbol = state.currency) {
@@ -360,8 +379,12 @@ function openModal(preset) {
   document.getElementById("modal-title").textContent = editingId ? "Edit entry" : "Add expense";
   document.getElementById("date").value = preset?.date || state.selectedDate || todayIso();
   document.getElementById("amount").value = preset?.amount != null ? String(preset.amount) : "";
-  document.getElementById("category").value = preset?.category || "Food";
-  document.getElementById("method").value = preset?.method || "Cash";
+  document.getElementById("category").value = pickNamed(
+    categories(),
+    preset?.category || state.lastCategory,
+    "Food",
+  );
+  document.getElementById("method").value = pickNamed(methods(), preset?.method || state.lastMethod, "Cash");
   document.getElementById("entry-type").value = preset?.type || "expense";
   document.getElementById("note").value = preset?.note || "";
   document.getElementById("save-template").checked = false;
@@ -462,7 +485,7 @@ function saveEntryFromForm() {
   const warn = document.getElementById("dup-warn");
   if (dup && !editingId) {
     warn.hidden = false;
-    warn.textContent = `Looks like a duplicate of ${dup.note || dup.category} on ${dup.date}. Save again to keep both.`;
+    warn.textContent = `Looks like a duplicate of ${dup.note || dup.category} on ${formatIsoDate(dup.date)}. Save again to keep both.`;
     if (!saveEntryFromForm._force) {
       saveEntryFromForm._force = true;
       return false;
@@ -498,6 +521,8 @@ function saveEntryFromForm() {
   }
   state.selectedMonth = date.slice(0, 7);
   state.selectedDate = date;
+  state.lastCategory = payload.category;
+  state.lastMethod = payload.method;
   saveState();
   return true;
   } finally {
@@ -909,7 +934,7 @@ function renderLedger() {
   const tableHtml = rows
     .map(
       (e) => `<tr data-id="${e.id}">
-        <td>${e.date}</td>
+        <td title="${e.date}">${formatIsoDate(e.date)}</td>
         <td><span class="tag">${e.category}</span></td>
         <td>${e.method}</td>
         <td>${highlightQuery(e.note || "—", state.search)}</td>
@@ -927,7 +952,7 @@ function renderLedger() {
           (e) => `<li data-id="${e.id}">
         <button type="button" class="link" data-edit="${e.id}">${highlightQuery(e.note || e.category, state.search)}</button>
         <div class="amt ${e.type === "income" ? "income" : ""}">${e.type === "income" ? "+" : ""}${formatMoney(e.amount)}</div>
-        <div class="sub">${e.date} · ${e.category} · ${e.method}</div>
+        <div class="sub">${formatIsoDate(e.date)} · ${e.category} · ${e.method}</div>
         <button type="button" class="icon" data-del="${e.id}" aria-label="Remove ${escapeHtml(e.note || e.category)}">×</button>
       </li>`,
         )
