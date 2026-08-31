@@ -615,6 +615,7 @@ dialog::backdrop { background: var(--overlay); }
   color: var(--text);
   font-size: 12px;
 }
+.chip.on { border-color: var(--accent); color: var(--accent); }
 
 .toast {
   position: fixed;
@@ -629,6 +630,4 @@ dialog::backdrop { background: var(--overlay); }
   display: flex;
   gap: 12px;
   align-items: center;
-}
-
 }

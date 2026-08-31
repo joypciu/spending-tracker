@@ -423,8 +423,11 @@ function openModal(preset) {
   fillNoteSuggest();
   renderTemplateChips();
   renderAmountChips();
+  renderDateChips();
   document.getElementById("entry-modal").showModal();
-  document.getElementById("amount").focus();
+  const amount = document.getElementById("amount");
+  amount.focus();
+  if (amount.value) amount.select();
   modalSnap = snapshotModal();
 }
 
@@ -731,6 +734,24 @@ function filteredLedger() {
 
 function loggingStreak() {
   return LedgerCore.loggingStreak(state.entries, todayIso());
+}
+
+function renderDateChips() {
+  const box = document.getElementById("date-chips");
+  if (!box) return;
+  const today = todayIso();
+  const yesterday = LedgerCore.shiftIso(today, -1);
+  const current = document.getElementById("date").value;
+  const chips = [
+    { iso: today, label: "Today" },
+    { iso: yesterday, label: "Yesterday" },
+  ];
+  box.innerHTML = chips
+    .map(
+      (c) =>
+        `<button type="button" class="chip${c.iso === current ? " on" : ""}" data-date-chip="${c.iso}">${c.label}</button>`,
+    )
+    .join("");
 }
 
 function renderAmountChips() {
@@ -1807,6 +1828,13 @@ function bind() {
     document.getElementById("amount").value = chip.dataset.amtChip;
     document.getElementById("amount").focus();
   };
+  document.getElementById("date-chips").onclick = (e) => {
+    const chip = e.target.closest("[data-date-chip]");
+    if (!chip) return;
+    document.getElementById("date").value = chip.dataset.dateChip;
+    renderDateChips();
+  };
+  document.getElementById("date").onchange = renderDateChips;
   document.getElementById("quick-templates").onclick = (e) => {
     const chip = e.target.closest(".chip");
     if (!chip) return;
