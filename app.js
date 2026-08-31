@@ -1365,22 +1365,57 @@ function download(name, body, type) {
   URL.revokeObjectURL(url);
 }
 
+function formatRelative(ts) {
+  const n = Number(ts);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  const diff = Date.now() - n;
+  if (diff < 45000) return "just now";
+  if (diff < 90 * 1000) return "1 min ago";
+  if (diff < 50 * 60 * 1000) return `${Math.max(2, Math.round(diff / 60000))} min ago`;
+  return new Date(n).toLocaleTimeString(uiLocale(), { hour: "numeric", minute: "2-digit" });
+}
+
 function importJson(file) {
   const reader = new FileReader();
   reader.onload = () => {
     try {
       const data = JSON.parse(reader.result);
       const incoming = Array.isArray(data) ? data : data.entries || [];
-      const byId = new Map(state.entries.map((e) => [e.id, e]));
-      for (const e of incoming.map(migrateEntry)) byId.set(e.id, e);
-      state.entries = [...byId.values()].sort((a, b) => b.date.localeCompare(a.date));
-      if (data.monthlyBudget) state.monthlyBudget = data.monthlyBudget;
-      if (data.templates) state.templates = data.templates;
-      if (Array.isArray(data.customMethods)) state.customMethods = data.customMethods;
-      if (Array.isArray(data.customCategories)) state.customCategories = data.customCategories;
-      saveState();
-      render();
-      toast(`Imported ${incoming.length} entries`);
+      if (
+        !incoming.length &&
+        !data.monthlyBudget &&
+        !data.templates &&
+        !data.customCategories &&
+        !data.customMethods
+      ) {
+        toast("That file has no ledger data");
+        return;
+      }
+      const apply = () => {
+        const byId = new Map(state.entries.map((e) => [e.id, e]));
+        for (const e of incoming.map(migrateEntry)) byId.set(e.id, e);
+        state.entries = [...byId.values()].sort((a, b) => b.date.localeCompare(a.date));
+        if (data.monthlyBudget) state.monthlyBudget = data.monthlyBudget;
+        if (data.templates) state.templates = data.templates;
+        if (Array.isArray(data.customMethods)) state.customMethods = data.customMethods;
+        if (Array.isArray(data.customCategories)) state.customCategories = data.customCategories;
+        bumpMeta();
+        saveState();
+        render();
+        toast(`Imported ${incoming.length} entries`);
+      };
+      const live = state.entries.some((e) => !e.deleted);
+      if (live) {
+        askConfirm({
+          title: "Merge this backup?",
+          body: `${incoming.length} rows will merge by id. Matching ids are replaced; the rest stay.`,
+          yes: "Merge",
+          no: "Cancel",
+          onYes: apply,
+        });
+        return;
+      }
+      apply();
     } catch {
       toast("Could not read that file");
     }
@@ -1406,7 +1441,7 @@ function renderSyncStatus() {
     return;
   }
   if (state.lastSyncAt) {
-    el.textContent = `Synced ${new Date(state.lastSyncAt).toLocaleTimeString()}`;
+    el.textContent = `Synced ${formatRelative(state.lastSyncAt)}`;
     if (detail) detail.className = "status ok";
     if (detail) detail.textContent = "Phone and desktop merge automatically whenever this page can reach the server.";
   } else {
@@ -2100,7 +2135,15 @@ function bind() {
     const typing = /input|textarea|select/i.test(e.target.tagName);
     if (e.key === "n" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      openModal({ date: state.selectedDate || todayIso() });
+      if (!document.getElementById("entry-modal").open) openModal({ date: state.selectedDate || todayIso() });
+    }
+    if (
+      document.getElementById("entry-modal").open &&
+      (e.ctrlKey || e.metaKey) &&
+      (e.key === "s" || e.key === "S" || e.key === "Enter")
+    ) {
+      e.preventDefault();
+      document.getElementById("entry-form").requestSubmit();
     }
     if ((e.key === "z" || e.key === "Z") && (e.ctrlKey || e.metaKey) && !typing) {
       e.preventDefault();
