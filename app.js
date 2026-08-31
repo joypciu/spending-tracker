@@ -1,0 +1,1287 @@
+const STORAGE_KEY = "spending-tracker-v1";
+const REMIND_HOUR = 22;
+const REMIND_MINUTE = 30;
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const CATEGORIES = [
+  "Food",
+  "Groceries",
+  "Transport",
+  "Housing",
+  "Utilities",
+  "Entertainment",
+  "Health",
+  "Shopping",
+  "Other",
+];
+const METHODS = ["Cash", "bKash", "Nagad", "Card", "Bank", "Other"];
+
+const DEFAULTS = {
+  selectedMonth: "2026-08",
+  selectedDate: "2026-08-31",
+  monthlyBudget: "40000",
+  budgetsByMonth: {},
+  dailyCap: "",
+  currency: "৳",
+  theme: "dark",
+  remindEnabled: false,
+  lastRemindDate: "",
+  view: "overview",
+  search: "",
+  filterCategory: "all",
+  filterMethod: "all",
+  filterType: "all",
+  sortKey: "date",
+  sortDir: "desc",
+  categoryCaps: {},
+  templates: [],
+  entries: [],
+  syncEnabled: false,
+  syncUrl: "",
+  syncId: "",
+  syncSecret: "",
+  lastSyncAt: 0,
+  metaUpdatedAt: 0,
+  deviceId: "",
+};
+
+const SEED_ENTRIES = [
+  { id: "1bef5c5f-af0c-4bb0-8b48-f81f1ea2fe74", date: "2026-08-31", amount: 10, category: "Food", note: "1 cup rong cha", method: "Cash", type: "expense" },
+  { id: "a66e1d3f-fee7-4b23-abd2-7eb74b452a63", date: "2026-08-31", amount: 80, category: "Food", note: "dupurer kawa from niribili ( 1 pis murgi)", method: "Cash", type: "expense" },
+  { id: "16a0a341-18b4-4bbb-9fbd-80741884f4ae", date: "2026-08-31", amount: 40, category: "Groceries", note: "2 litre water", method: "Cash", type: "expense" },
+  { id: "a32d0bd1-d0ed-490b-9faf-289a5d73987c", date: "2026-08-30", amount: 200, category: "Food", note: "raater jaal nasta 80 taka + 1 pis kitchen roast", method: "Cash", type: "expense" },
+  { id: "52735be3-0ee7-4745-9de7-757166c2f54b", date: "2026-08-30", amount: 95, category: "Food", note: "apple 2 ta", method: "Cash", type: "expense" },
+  { id: "b079f60a-5538-459f-9f12-e5225015cfc7", date: "2026-08-30", amount: 50, category: "Transport", note: "road 14 rickshaw + saudia er polare 20 taka extra dichilam", method: "Cash", type: "expense" },
+  { id: "69c170b3-e210-4bf3-b943-2bc2c0734317", date: "2026-08-30", amount: 40, category: "Food", note: "banana", method: "Cash", type: "expense" },
+];
+
+let remindTimer = null;
+let undo = null;
+let editingId = null;
+let toastTimer = null;
+let state = loadState();
+
+function pad2(n) {
+  return n < 10 ? `0${n}` : String(n);
+}
+
+function todayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function currentMonthKey() {
+  return todayIso().slice(0, 7);
+}
+
+function daysInMonth(year, month) {
+  return new Date(year, month, 0).getDate();
+}
+
+function shiftMonth(key, delta) {
+  const [y, m] = key.split("-").map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+}
+
+function monthLabel(key) {
+  const [y, m] = key.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
+}
+
+function formatMoney(n, symbol = state.currency) {
+  const abs = Math.abs(n).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return n < 0 ? `-${symbol}${abs}` : `${symbol}${abs}`;
+}
+
+function newId() {
+  return crypto.randomUUID ? crypto.randomUUID() : `e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function migrateEntry(e) {
+  return {
+    id: e.id || newId(),
+    date: e.date,
+    amount: Number(e.amount) || 0,
+    category: CATEGORIES.includes(e.category) ? e.category : "Other",
+    note: e.note || "",
+    method: METHODS.includes(e.method) ? e.method : "Cash",
+    type: e.type === "income" ? "income" : "expense",
+    updatedAt: e.updatedAt || Date.now(),
+    deleted: !!e.deleted,
+  };
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const merged = { ...DEFAULTS, ...parsed };
+      merged.entries = Array.isArray(parsed.entries)
+        ? parsed.entries.map(migrateEntry)
+        : structuredClone(SEED_ENTRIES);
+      if (!merged.selectedDate) merged.selectedDate = todayIso();
+      if (!merged.budgetsByMonth) merged.budgetsByMonth = {};
+      if (!merged.categoryCaps) merged.categoryCaps = {};
+      if (!merged.templates) merged.templates = [];
+      if (!merged.deviceId) merged.deviceId = newId();
+      if (!merged.syncUrl && location.protocol.startsWith("http")) {
+        merged.syncUrl = location.origin;
+      }
+      return merged;
+    }
+  } catch {
+    /* seed */
+  }
+  return {
+    ...structuredClone(DEFAULTS),
+    entries: structuredClone(SEED_ENTRIES).map(migrateEntry),
+    selectedMonth: currentMonthKey(),
+    selectedDate: todayIso(),
+    deviceId: newId(),
+    syncUrl: location.protocol.startsWith("http") ? location.origin : "",
+  };
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  scheduleSync();
+}
+
+function bumpMeta() {
+  state.metaUpdatedAt = Date.now();
+}
+
+function pairingCode() {
+  if (!state.syncId || !state.syncSecret) return "";
+  return `LEDGER.${state.syncId}.${state.syncSecret}`;
+}
+
+function parsePairing(code) {
+  const parts = String(code || "").trim().split(".");
+  if (parts.length >= 3 && parts[0] === "LEDGER") {
+    return { id: parts[1], secret: parts.slice(2).join(".") };
+  }
+  return null;
+}
+
+function monthBudget() {
+  const specific = state.budgetsByMonth[state.selectedMonth];
+  const raw = specific != null && specific !== "" ? specific : state.monthlyBudget;
+  const n = Number.parseFloat(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function signedAmount(e) {
+  return e.type === "income" ? -e.amount : e.amount;
+}
+
+function monthEntries(month = state.selectedMonth) {
+  const prefix = `${month}-`;
+  return state.entries.filter((e) => !e.deleted && e.date.startsWith(prefix));
+}
+
+function expenseTotal(list) {
+  return list.filter((e) => e.type !== "income").reduce((s, e) => s + e.amount, 0);
+}
+
+function incomeTotal(list) {
+  return list.filter((e) => e.type === "income").reduce((s, e) => s + e.amount, 0);
+}
+
+function netSpend(list) {
+  return expenseTotal(list) - incomeTotal(list);
+}
+
+function toast(message, actionLabel, action) {
+  const el = document.getElementById("toast");
+  el.hidden = false;
+  el.innerHTML = "";
+  const span = document.createElement("span");
+  span.textContent = message;
+  el.appendChild(span);
+  if (actionLabel && action) {
+    const btn = document.createElement("button");
+    btn.className = "link";
+    btn.textContent = actionLabel;
+    btn.style.border = "0";
+    btn.style.background = "none";
+    btn.style.color = "var(--accent)";
+    btn.onclick = () => {
+      action();
+      hideToast();
+    };
+    el.appendChild(btn);
+  }
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, 5000);
+}
+
+function hideToast() {
+  document.getElementById("toast").hidden = true;
+}
+
+function setBanner(text) {
+  const el = document.getElementById("banner");
+  el.hidden = !text;
+  el.textContent = text || "";
+}
+
+function fillSelect(el, items, withAll) {
+  const cur = el.value;
+  el.innerHTML = "";
+  if (withAll) {
+    const o = document.createElement("option");
+    o.value = "all";
+    o.textContent = withAll;
+    el.appendChild(o);
+  }
+  for (const item of items) {
+    const o = document.createElement("option");
+    o.value = item;
+    o.textContent = item;
+    el.appendChild(o);
+  }
+  if ([...el.options].some((o) => o.value === cur)) el.value = cur;
+}
+
+function nextReminderTime(from = new Date()) {
+  const t = new Date(from);
+  t.setHours(REMIND_HOUR, REMIND_MINUTE, 0, 0);
+  if (t.getTime() <= from.getTime()) t.setDate(t.getDate() + 1);
+  return t;
+}
+
+function setStatus(text, kind) {
+  const el = document.getElementById("remind-status");
+  el.hidden = !text;
+  el.textContent = text;
+  el.className = `status ${kind || ""}`;
+}
+
+function showLocalNotification() {
+  const title = "Ledger";
+  const body = "It is 10:30 PM. Add today’s spending.";
+  if (window.Notification && Notification.permission === "granted") {
+    try {
+      new Notification(title, { body, tag: "daily-spend-1030" });
+    } catch {
+      /* ignore */
+    }
+  }
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.getRegistration().then((reg) => {
+      if (reg) reg.showNotification(title, { body, tag: "daily-spend-1030" });
+    });
+  }
+}
+
+function scheduleInPageReminder() {
+  if (remindTimer) clearTimeout(remindTimer);
+  if (!state.remindEnabled) return;
+  const delay = Math.max(1000, nextReminderTime().getTime() - Date.now());
+  remindTimer = setTimeout(() => {
+    const stamp = todayIso();
+    if (state.lastRemindDate !== stamp) {
+      state.lastRemindDate = stamp;
+      saveState();
+      showLocalNotification();
+    }
+    scheduleInPageReminder();
+  }, delay);
+}
+
+async function enableReminders() {
+  if (!("Notification" in window)) {
+    setStatus("This browser cannot show alerts. The Windows 10:30 PM task still can.", "warn");
+    return false;
+  }
+  let perm = Notification.permission;
+  if (perm === "default") perm = await Notification.requestPermission();
+  if (perm !== "granted") {
+    setStatus("Permission denied. The Windows task can still alert you at 10:30 PM.", "warn");
+    return false;
+  }
+  scheduleInPageReminder();
+  setStatus(`Next in-app reminder: ${nextReminderTime().toLocaleString()}.`, "ok");
+  return true;
+}
+
+function disableReminders() {
+  if (remindTimer) clearTimeout(remindTimer);
+  remindTimer = null;
+  setStatus("In-app reminder off.", "warn");
+}
+
+function openModal(preset) {
+  editingId = preset?.id || null;
+  document.getElementById("modal-title").textContent = editingId ? "Edit entry" : "Add expense";
+  document.getElementById("date").value = preset?.date || state.selectedDate || todayIso();
+  document.getElementById("amount").value = preset?.amount != null ? String(preset.amount) : "";
+  document.getElementById("category").value = preset?.category || "Food";
+  document.getElementById("method").value = preset?.method || "Cash";
+  document.getElementById("entry-type").value = preset?.type || "expense";
+  document.getElementById("note").value = preset?.note || "";
+  document.getElementById("save-template").checked = false;
+  renderTemplateChips();
+  document.getElementById("entry-modal").showModal();
+  document.getElementById("amount").focus();
+}
+
+function closeModal() {
+  document.getElementById("entry-modal").close();
+  editingId = null;
+}
+
+function saveEntryFromForm() {
+  const amount = Number.parseFloat(document.getElementById("amount").value);
+  const date = document.getElementById("date").value;
+  if (!Number.isFinite(amount) || amount <= 0 || !date) return false;
+  const payload = {
+    id: editingId || newId(),
+    date,
+    amount: Math.round(amount * 100) / 100,
+    category: document.getElementById("category").value,
+    method: document.getElementById("method").value,
+    type: document.getElementById("entry-type").value,
+    note: document.getElementById("note").value.trim(),
+    updatedAt: Date.now(),
+    deleted: false,
+  };
+  if (editingId) {
+    state.entries = state.entries.map((e) => (e.id === editingId ? payload : e));
+    toast("Entry updated");
+  } else {
+    state.entries.unshift(payload);
+    toast("Expense saved");
+  }
+  if (document.getElementById("save-template").checked) {
+    state.templates.unshift({
+      id: newId(),
+      amount: payload.amount,
+      category: payload.category,
+      method: payload.method,
+      type: payload.type,
+      note: payload.note,
+      updatedAt: Date.now(),
+      deleted: false,
+    });
+    state.templates = state.templates.slice(0, 12);
+  }
+  state.selectedMonth = date.slice(0, 7);
+  state.selectedDate = date;
+  saveState();
+  return true;
+}
+
+function removeEntry(id) {
+  const found = state.entries.find((e) => e.id === id);
+  if (!found) return;
+  found.deleted = true;
+  found.updatedAt = Date.now();
+  undo = { ...found, deleted: false };
+  saveState();
+  render();
+  toast("Entry removed", "Undo", () => {
+    if (undo) {
+      const live = state.entries.find((e) => e.id === undo.id);
+      if (live) {
+        live.deleted = false;
+        live.updatedAt = Date.now();
+      } else {
+        state.entries.unshift({ ...undo, updatedAt: Date.now() });
+      }
+      undo = null;
+      saveState();
+      render();
+    }
+  });
+}
+
+function applyTemplate(t) {
+  openModal({
+    date: state.selectedDate || todayIso(),
+    amount: t.amount,
+    category: t.category,
+    method: t.method,
+    type: t.type,
+    note: t.note,
+  });
+}
+
+function filteredLedger() {
+  const q = (state.search || "").trim().toLowerCase();
+  let rows = monthEntries();
+  if (state.filterCategory !== "all") rows = rows.filter((e) => e.category === state.filterCategory);
+  if (state.filterMethod !== "all") rows = rows.filter((e) => e.method === state.filterMethod);
+  if (state.filterType !== "all") rows = rows.filter((e) => e.type === state.filterType);
+  if (q) {
+    rows = rows.filter((e) =>
+      `${e.note} ${e.category} ${e.method} ${e.amount}`.toLowerCase().includes(q),
+    );
+  }
+  const dir = state.sortDir === "asc" ? 1 : -1;
+  rows.sort((a, b) => {
+    let av = a[state.sortKey];
+    let bv = b[state.sortKey];
+    if (state.sortKey === "amount") return (a.amount - b.amount) * dir;
+    av = String(av || "");
+    bv = String(bv || "");
+    return av.localeCompare(bv) * dir;
+  });
+  return rows;
+}
+
+function loggingStreak() {
+  const dates = new Set(state.entries.filter((e) => !e.deleted).map((e) => e.date));
+  let d = new Date();
+  let n = 0;
+  for (;;) {
+    const iso = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    if (dates.has(iso)) {
+      n += 1;
+      d.setDate(d.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return n;
+}
+
+function renderTemplateChips() {
+  const box = document.getElementById("quick-templates");
+  const recent = [];
+  const seen = new Set();
+  for (const t of state.templates) {
+    if (t.deleted) continue;
+    const key = `${t.note}|${t.amount}|${t.category}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    recent.push(t);
+  }
+  for (const e of state.entries) {
+    if (!e.note) continue;
+    const key = `${e.note}|${e.amount}|${e.category}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    recent.push(e);
+    if (recent.length >= 8) break;
+  }
+  box.innerHTML = recent
+    .map(
+      (t) =>
+        `<button type="button" class="chip" data-tpl="${t.id || ""}" data-note="${encodeURIComponent(t.note)}" data-amt="${t.amount}" data-cat="${t.category}" data-method="${t.method || "Cash"}" data-type="${t.type || "expense"}">${escapeHtml(t.note || t.category)} · ${formatMoney(t.amount)}</button>`,
+    )
+    .join("");
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderKpis() {
+  const list = monthEntries();
+  const spent = expenseTotal(list);
+  const income = incomeTotal(list);
+  const net = spent - income;
+  const today = todayIso();
+  const todayList = state.entries.filter((e) => !e.deleted && e.date === today);
+  const todaySpent = expenseTotal(todayList);
+  const prefix = `${state.selectedMonth}-`;
+  let elapsed = 0;
+  if (today.startsWith(prefix)) elapsed = Number(today.slice(8, 10));
+  else if (today > `${prefix}01`) elapsed = daysInMonth(...state.selectedMonth.split("-").map(Number));
+  const avg = elapsed > 0 ? spent / elapsed : 0;
+  const budget = monthBudget();
+  const remaining = budget ? budget - net : 0;
+  const prev = monthEntries(shiftMonth(state.selectedMonth, -1));
+  const prevNet = netSpend(prev);
+  const delta = prevNet > 0 ? ((net - prevNet) / prevNet) * 100 : null;
+  let remainTone = "";
+  if (budget) remainTone = remaining < 0 ? "danger" : remaining < budget * 0.2 ? "warn" : "ok";
+
+  document.getElementById("kpis").innerHTML = `
+    <div class="kpi"><div class="value">${formatMoney(spent)}</div><div class="label">Spent · ${monthLabel(state.selectedMonth)}</div>${delta != null ? `<div class="delta">${delta >= 0 ? "+" : ""}${delta.toFixed(0)}% vs last month</div>` : ""}</div>
+    <div class="kpi"><div class="value">${formatMoney(today.startsWith(prefix) ? todaySpent : 0)}</div><div class="label">Spent today</div><div class="delta">${loggingStreak()} day log streak</div></div>
+    <div class="kpi"><div class="value">${formatMoney(avg)}</div><div class="label">Average / day so far</div></div>
+    <div class="kpi ${remainTone}"><div class="value">${budget ? formatMoney(remaining) : formatMoney(net)}</div><div class="label">${budget ? "Budget remaining" : "Net spend"}</div>${income ? `<div class="delta">${formatMoney(income)} in refunds</div>` : ""}</div>
+  `;
+}
+
+function renderBudgetBar() {
+  const list = monthEntries();
+  const net = netSpend(list);
+  const budget = monthBudget();
+  const bar = document.getElementById("budget-bar");
+  if (!budget) {
+    bar.hidden = true;
+    return;
+  }
+  bar.hidden = false;
+  const pct = Math.round((net / budget) * 100);
+  document.getElementById("budget-left").textContent = `${pct}% of monthly budget`;
+  document.getElementById("budget-right").textContent = `${formatMoney(net)} / ${formatMoney(budget)}`;
+  const fill = document.getElementById("budget-fill");
+  fill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+  fill.classList.toggle("over", net > budget);
+  const track = document.getElementById("budget-track");
+  if (track) {
+    track.setAttribute("aria-valuenow", String(Math.min(100, Math.max(0, pct))));
+    track.setAttribute("aria-label", `${pct} percent of monthly budget used`);
+  }
+  const [y, m] = state.selectedMonth.split("-").map(Number);
+  const days = daysInMonth(y, m);
+  const today = todayIso();
+  const elapsed = today.startsWith(`${state.selectedMonth}-`) ? Number(today.slice(8, 10)) : days;
+  const expected = (budget / days) * elapsed;
+  const vsPace = net - expected;
+  document.getElementById("pace-note").textContent =
+    vsPace > 0
+      ? `${formatMoney(vsPace)} ahead of even daily pace.`
+      : `${formatMoney(-vsPace)} under even daily pace.`;
+}
+
+function renderCalendar() {
+  const [year, month] = state.selectedMonth.split("-").map(Number);
+  const dayCount = daysInMonth(year, month);
+  const list = monthEntries();
+  const daily = new Map();
+  const counts = new Map();
+  for (let d = 1; d <= dayCount; d++) {
+    daily.set(d, 0);
+    counts.set(d, 0);
+  }
+  for (const e of list) {
+    const day = Number(e.date.slice(8, 10));
+    daily.set(day, (daily.get(day) || 0) + signedAmount(e));
+    counts.set(day, (counts.get(day) || 0) + 1);
+  }
+  const today = todayIso();
+  const cap = Number.parseFloat(state.dailyCap);
+  const hasCap = Number.isFinite(cap) && cap > 0;
+  const first = new Date(year, month - 1, 1).getDay();
+  let html = WEEKDAYS.map((w) => `<div class="dow">${w}</div>`).join("");
+  for (let i = 0; i < first; i++) html += `<div></div>`;
+  for (let d = 1; d <= dayCount; d++) {
+    const iso = `${state.selectedMonth}-${pad2(d)}`;
+    const total = daily.get(d) || 0;
+    const cls = ["day"];
+    if (iso === today) cls.push("today");
+    if (iso === state.selectedDate) cls.push("selected");
+    if (iso > today) cls.push("future");
+    if (hasCap && total > cap) cls.push("over");
+    const n = counts.get(d) || 0;
+    html += `<button type="button" class="${cls.join(" ")}" data-iso="${iso}" role="gridcell" aria-pressed="${iso === state.selectedDate}" aria-label="${iso}, ${total ? formatMoney(total) : "no spend"}">
+      <span class="n">${d}</span>
+      <span class="amt ${total ? "" : "empty"}">${total ? formatMoney(total) : "—"}</span>
+      <span class="count">${n ? `${n}` : ""}</span>
+    </button>`;
+  }
+  document.getElementById("calendar").innerHTML = html;
+  document.getElementById("cal-title").textContent = monthLabel(state.selectedMonth);
+}
+
+function renderDayPanel() {
+  const iso = state.selectedDate;
+  const items = state.entries.filter((e) => !e.deleted && e.date === iso).sort((a, b) => b.id.localeCompare(a.id));
+  const spent = expenseTotal(items);
+  const pretty = iso
+    ? new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+      })
+    : "Select a day";
+  document.getElementById("day-panel-title").textContent = pretty;
+  document.getElementById("day-panel-total").textContent = formatMoney(spent);
+  document.getElementById("day-panel-list").innerHTML = items.length
+    ? items
+        .map(
+          (e) => `<li>
+            <div>
+              <button type="button" class="link" data-edit="${e.id}">${escapeHtml(e.note || e.category)}</button>
+              <div class="meta">${e.category} · ${e.method}${e.type === "income" ? " · refund" : ""}</div>
+            </div>
+            <div class="${e.type === "income" ? "income" : ""}">${e.type === "income" ? "+" : ""}${formatMoney(e.amount)}</div>
+          </li>`,
+        )
+        .join("")
+    : `<li><div class="meta">Nothing logged. Add the first purchase for this day.</div></li>`;
+}
+
+function renderLedger() {
+  const rows = filteredLedger();
+  const spent = expenseTotal(rows);
+  document.getElementById("ledger-meta").textContent = `${rows.length} rows · ${formatMoney(spent)} expenses in view`;
+  const tableHtml = rows
+    .map(
+      (e) => `<tr data-id="${e.id}">
+        <td>${e.date}</td>
+        <td><span class="tag">${e.category}</span></td>
+        <td>${e.method}</td>
+        <td>${escapeHtml(e.note || "—")}</td>
+        <td class="num ${e.type === "income" ? "income" : ""}">${e.type === "income" ? "+" : ""}${formatMoney(e.amount)}</td>
+        <td><button type="button" class="icon" data-del="${e.id}" aria-label="Remove ${escapeHtml(e.note || e.category)}">×</button></td>
+      </tr>`,
+    )
+    .join("");
+  document.getElementById("purchases").innerHTML = tableHtml;
+  document.getElementById("ledger-cards").innerHTML = rows
+    .map(
+      (e) => `<li data-id="${e.id}">
+        <button type="button" class="link" data-edit="${e.id}">${escapeHtml(e.note || e.category)}</button>
+        <div class="amt ${e.type === "income" ? "income" : ""}">${e.type === "income" ? "+" : ""}${formatMoney(e.amount)}</div>
+        <div class="sub">${e.date} · ${e.category} · ${e.method}</div>
+        <button type="button" class="icon" data-del="${e.id}" aria-label="Remove ${escapeHtml(e.note || e.category)}">×</button>
+      </li>`,
+    )
+    .join("");
+}
+
+function renderInsights() {
+  const list = monthEntries();
+  const [year, month] = state.selectedMonth.split("-").map(Number);
+  const dayCount = daysInMonth(year, month);
+  const daily = new Map();
+  for (let d = 1; d <= dayCount; d++) daily.set(d, 0);
+  let weekend = 0;
+  let weekday = 0;
+  for (const e of list) {
+    if (e.type === "income") continue;
+    const day = Number(e.date.slice(8, 10));
+    daily.set(day, (daily.get(day) || 0) + e.amount);
+    const wd = new Date(`${e.date}T12:00:00`).getDay();
+    if (wd === 0 || wd === 6) weekend += e.amount;
+    else weekday += e.amount;
+  }
+  const spent = expenseTotal(list);
+  const maxDay = Math.max(...daily.values(), 1);
+  const cap = Number.parseFloat(state.dailyCap);
+  document.getElementById("day-caption").textContent = `Daily expense totals · ${monthLabel(state.selectedMonth)}`;
+  document.getElementById("day-chart").innerHTML = Array.from({ length: dayCount }, (_, i) => {
+    const v = daily.get(i + 1) || 0;
+    const h = v > 0 ? Math.max(3, (v / maxDay) * 128) : 0;
+    const over = Number.isFinite(cap) && cap > 0 && v > cap;
+    return `<div class="col" title="Day ${i + 1}: ${formatMoney(v)}"><div class="bar ${over ? "over" : ""}" style="height:${h}px"></div><div class="lbl">${i + 1}</div></div>`;
+  }).join("");
+
+  const cats = new Map();
+  const methods = new Map();
+  for (const e of list) {
+    if (e.type === "income") continue;
+    cats.set(e.category, (cats.get(e.category) || 0) + e.amount);
+    methods.set(e.method, (methods.get(e.method) || 0) + e.amount);
+  }
+  const ranked = [...cats.entries()].sort((a, b) => b[1] - a[1]);
+  const catMax = ranked[0]?.[1] || 1;
+  document.getElementById("cat-list").innerHTML = ranked.length
+    ? ranked
+        .map(([name, value]) => {
+          const capN = Number.parseFloat(state.categoryCaps[name]);
+          let cls = "fill";
+          let extra = "";
+          if (Number.isFinite(capN) && capN > 0) {
+            extra = ` / ${formatMoney(capN)}`;
+            if (value > capN) cls += " over";
+            else if (value > capN * 0.8) cls += " warn";
+          }
+          return `<div class="cat-row"><div>${name}</div><div class="track"><div class="${cls}" style="width:${(value / catMax) * 100}%"></div></div><div class="num">${formatMoney(value)}${extra}</div></div>`;
+        })
+        .join("")
+    : `<p class="caption">No expenses this month yet.</p>`;
+
+  const mRanked = [...methods.entries()].sort((a, b) => b[1] - a[1]);
+  const mMax = mRanked[0]?.[1] || 1;
+  document.getElementById("method-list").innerHTML = mRanked.length
+    ? mRanked
+        .map(
+          ([name, value]) =>
+            `<div class="method-row cat-row"><div>${name}</div><div class="track"><div class="fill" style="width:${(value / mMax) * 100}%"></div></div><div class="num">${formatMoney(value)}</div></div>`,
+        )
+        .join("")
+    : `<p class="caption">No expenses this month yet.</p>`;
+
+  const splitMax = Math.max(weekend, weekday, 1);
+  document.getElementById("week-split").innerHTML = `
+    <div class="cat-row"><div>Weekdays</div><div class="track"><div class="fill" style="width:${(weekday / splitMax) * 100}%"></div></div><div class="num">${formatMoney(weekday)}</div></div>
+    <div class="cat-row"><div>Weekend</div><div class="track"><div class="fill" style="width:${(weekend / splitMax) * 100}%"></div></div><div class="num">${formatMoney(weekend)}</div></div>
+  `;
+
+  const daysLogged = new Set(list.map((e) => e.date)).size;
+  document.getElementById("insight-kpis").innerHTML = `
+    <div class="kpi"><div class="value">${formatMoney(spent)}</div><div class="label">Expenses</div></div>
+    <div class="kpi"><div class="value">${daysLogged}</div><div class="label">Days with activity</div></div>
+    <div class="kpi"><div class="value">${formatMoney(weekday / Math.max(1, list.filter((e) => e.type !== "income" && ![0, 6].includes(new Date(`${e.date}T12:00:00`).getDay())).length))}</div><div class="label">Avg weekday ticket</div></div>
+    <div class="kpi"><div class="value">${formatMoney(incomeTotal(list))}</div><div class="label">Refunds / income</div></div>
+  `;
+}
+
+function renderSettings() {
+  document.getElementById("budget").value = state.budgetsByMonth[state.selectedMonth] ?? state.monthlyBudget;
+  document.getElementById("daily-cap").value = state.dailyCap;
+  document.getElementById("currency").value = state.currency;
+  document.getElementById("theme-light").checked = state.theme === "light";
+  document.getElementById("remind-enabled").checked = !!state.remindEnabled;
+  document.getElementById("sync-enabled").checked = !!state.syncEnabled;
+  document.getElementById("sync-url").value = state.syncUrl || "";
+  document.getElementById("sync-code").value = pairingCode();
+  const templates = state.templates.filter((t) => !t.deleted);
+  document.getElementById("cat-caps").innerHTML = CATEGORIES.map(
+    (c) =>
+      `<label>${c}<input type="number" min="0" data-cap="${c}" placeholder="no cap" value="${state.categoryCaps[c] || ""}" /></label>`,
+  ).join("");
+  document.getElementById("template-list").innerHTML = templates.length
+    ? templates
+        .map(
+          (t) => `<li>
+            <div>
+              <button type="button" class="link" data-use-tpl="${t.id}">${escapeHtml(t.note || t.category)} · ${formatMoney(t.amount)}</button>
+              <div class="meta">${t.category} · ${t.method}</div>
+            </div>
+            <button type="button" class="icon" data-del-tpl="${t.id}" aria-label="Remove template">×</button>
+          </li>`,
+        )
+        .join("")
+    : `<li><div class="meta">Save an entry as a template from the add dialog.</div></li>`;
+  renderSyncStatus();
+}
+
+function render() {
+  document.documentElement.dataset.theme = state.theme === "light" ? "light" : "dark";
+  document.querySelector('meta[name="theme-color"]').content = state.theme === "light" ? "#f4f2ee" : "#0f1114";
+  document.getElementById("month-btn").textContent = monthLabel(state.selectedMonth);
+  renderSyncStatus();
+  for (const tab of document.querySelectorAll("[data-view]")) {
+    const on = tab.dataset.view === state.view;
+    tab.classList.toggle("active", on);
+    if (tab.classList.contains("tab") || tab.classList.contains("dock-btn")) {
+      if (on) tab.setAttribute("aria-current", "page");
+      else tab.removeAttribute("aria-current");
+    }
+  }
+  for (const view of ["overview", "ledger", "insights", "settings"]) {
+    document.getElementById(`view-${view}`).hidden = state.view !== view;
+  }
+  document.getElementById("search").value = state.search;
+  document.getElementById("filter-category").value = state.filterCategory;
+  document.getElementById("filter-method").value = state.filterMethod;
+  document.getElementById("filter-type").value = state.filterType;
+
+  const today = todayIso();
+  const loggedToday = state.entries.some((e) => !e.deleted && e.date === today && e.type !== "income");
+  setBanner(loggedToday ? "" : "Nothing logged today. Add purchases as they happen so 10:30 PM is only a backup.");
+
+  renderKpis();
+  renderBudgetBar();
+  renderCalendar();
+  renderDayPanel();
+  renderLedger();
+  renderInsights();
+  renderSettings();
+}
+
+function exportCsv() {
+  const rows = filteredLedger();
+  const header = ["date", "type", "category", "method", "note", "amount"];
+  const lines = [header.join(",")].concat(
+    rows.map((e) =>
+      [e.date, e.type, e.category, e.method, `"${String(e.note).replace(/"/g, '""')}"`, e.amount].join(","),
+    ),
+  );
+  download(`ledger-${state.selectedMonth}.csv`, lines.join("\n"), "text/csv");
+}
+
+function exportJson() {
+  download(
+    `ledger-backup-${todayIso()}.json`,
+    JSON.stringify(state, null, 2),
+    "application/json",
+  );
+}
+
+function download(name, body, type) {
+  const blob = new Blob([body], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importJson(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      const incoming = Array.isArray(data) ? data : data.entries || [];
+      const byId = new Map(state.entries.map((e) => [e.id, e]));
+      for (const e of incoming.map(migrateEntry)) byId.set(e.id, e);
+      state.entries = [...byId.values()].sort((a, b) => b.date.localeCompare(a.date));
+      if (data.monthlyBudget) state.monthlyBudget = data.monthlyBudget;
+      if (data.templates) state.templates = data.templates;
+      saveState();
+      render();
+      toast(`Imported ${incoming.length} entries`);
+    } catch {
+      toast("Could not read that file");
+    }
+  };
+  reader.readAsText(file);
+}
+
+function renderSyncStatus() {
+  const el = document.getElementById("sync-status");
+  const detail = document.getElementById("sync-detail");
+  if (!state.syncEnabled) {
+    el.textContent = navigator.onLine ? "On this device" : "Offline";
+    if (detail) detail.textContent = "Turn on sync and paste the same pairing code on your phone and computer.";
+    return;
+  }
+  if (!navigator.onLine) {
+    el.textContent = "Offline — will sync later";
+    if (detail) detail.textContent = "Changes are saved here and will upload when the internet is back.";
+    return;
+  }
+  if (syncBusy) {
+    el.textContent = "Syncing…";
+    return;
+  }
+  if (state.lastSyncAt) {
+    el.textContent = `Synced ${new Date(state.lastSyncAt).toLocaleTimeString()}`;
+    if (detail) detail.className = "status ok";
+    if (detail) detail.textContent = "Phone and desktop merge automatically whenever this page can reach the server.";
+  } else {
+    el.textContent = "Sync ready";
+    if (detail) detail.textContent = "Press Sync now, or wait — it retries on its own.";
+  }
+}
+
+let syncBusy = false;
+let syncTimer = null;
+
+function scheduleSync() {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    syncNow({ silent: true });
+  }, 900);
+}
+
+function syncEndpoint() {
+  const base = (state.syncUrl || (location.protocol.startsWith("http") ? location.origin : "")).replace(/\/$/, "");
+  if (!base || !state.syncId) return "";
+  return `${base}/api/sync/${encodeURIComponent(state.syncId)}`;
+}
+
+async function syncNow({ silent } = {}) {
+  if (!state.syncEnabled || !state.syncSecret || !state.syncId) return;
+  const url = syncEndpoint();
+  if (!url || !navigator.onLine) {
+    renderSyncStatus();
+    return;
+  }
+  if (typeof LedgerSync === "undefined") return;
+  if (syncBusy) return;
+  syncBusy = true;
+  renderSyncStatus();
+  try {
+    let remote = null;
+    const res = await fetch(url, { cache: "no-store" });
+    if (res.ok) {
+      const pack = await res.json();
+      remote = await LedgerSync.decryptJson(pack, state.syncSecret);
+    } else if (res.status !== 404) {
+      throw new Error("Could not reach sync server");
+    }
+    const local = LedgerSync.fromState(state);
+    const merged = LedgerSync.mergeDocs(local, remote);
+    LedgerSync.applyToState(state, merged);
+    const pack = await LedgerSync.encryptJson(LedgerSync.fromState(state), state.syncSecret);
+    const put = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pack),
+    });
+    if (!put.ok) throw new Error("Upload failed");
+    state.lastSyncAt = Date.now();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    render();
+    if (!silent) toast("Devices synced");
+  } catch (err) {
+    const detail = document.getElementById("sync-detail");
+    if (detail) {
+      detail.className = "status warn";
+      detail.textContent = silent
+        ? "Waiting for a connection to the sync server."
+        : String(err.message || err);
+    }
+    document.getElementById("sync-status").textContent = "Sync paused";
+  } finally {
+    syncBusy = false;
+    renderSyncStatus();
+  }
+}
+
+function generatePairing() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const secretBytes = crypto.getRandomValues(new Uint8Array(18));
+  const secret = [...secretBytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  state.syncId = hex;
+  state.syncSecret = secret;
+  state.syncEnabled = true;
+  if (!state.syncUrl && location.protocol.startsWith("http")) state.syncUrl = location.origin;
+  saveState();
+  render();
+  return pairingCode();
+}
+
+function bind() {
+  fillSelect(document.getElementById("category"), CATEGORIES);
+  fillSelect(document.getElementById("method"), METHODS);
+  fillSelect(document.getElementById("filter-category"), CATEGORIES, "All categories");
+  fillSelect(document.getElementById("filter-method"), METHODS, "All methods");
+
+  document.getElementById("prev-month").onclick = () => {
+    state.selectedMonth = shiftMonth(state.selectedMonth, -1);
+    state.selectedDate = `${state.selectedMonth}-01`;
+    saveState();
+    render();
+  };
+  document.getElementById("next-month").onclick = () => {
+    state.selectedMonth = shiftMonth(state.selectedMonth, 1);
+    state.selectedDate = `${state.selectedMonth}-01`;
+    saveState();
+    render();
+  };
+  document.getElementById("month-btn").onclick = () => {
+    state.selectedMonth = currentMonthKey();
+    state.selectedDate = todayIso();
+    saveState();
+    render();
+  };
+  document.getElementById("jump-today").onclick = () => {
+    state.selectedMonth = currentMonthKey();
+    state.selectedDate = todayIso();
+    state.view = "overview";
+    saveState();
+    render();
+  };
+  document.getElementById("open-add").onclick = () => openModal({ date: state.selectedDate || todayIso() });
+  document.getElementById("fab-add").onclick = () => openModal({ date: state.selectedDate || todayIso() });
+  document.getElementById("day-add").onclick = () => openModal({ date: state.selectedDate || todayIso() });
+
+  const onNav = (e) => {
+    const tab = e.target.closest("[data-view]");
+    if (!tab) return;
+    state.view = tab.dataset.view;
+    saveState();
+    render();
+  };
+  document.querySelector(".tabs").onclick = onNav;
+  document.querySelector(".dock").onclick = onNav;
+
+  document.getElementById("calendar").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-iso]");
+    if (!btn) return;
+    state.selectedDate = btn.dataset.iso;
+    saveState();
+    render();
+  });
+  document.getElementById("calendar").addEventListener("dblclick", (e) => {
+    const btn = e.target.closest("[data-iso]");
+    if (!btn) return;
+    state.selectedDate = btn.dataset.iso;
+    openModal({ date: btn.dataset.iso });
+  });
+
+  document.getElementById("day-panel-list").onclick = (e) => {
+    const edit = e.target.closest("[data-edit]");
+    if (edit) {
+      const entry = state.entries.find((x) => x.id === edit.dataset.edit);
+      if (entry) openModal(entry);
+    }
+  };
+
+  document.getElementById("ledger-cards").onclick = (e) => {
+    const del = e.target.closest("[data-del]");
+    if (del) {
+      removeEntry(del.dataset.del);
+      return;
+    }
+    const edit = e.target.closest("[data-edit], li[data-id]");
+    if (edit) {
+      const id = edit.dataset.edit || edit.dataset.id;
+      const entry = state.entries.find((x) => x.id === id);
+      if (entry && !entry.deleted) openModal(entry);
+    }
+  };
+  document.getElementById("purchases").onclick = (e) => {
+    const del = e.target.closest("[data-del]");
+    if (del) {
+      e.stopPropagation();
+      removeEntry(del.dataset.del);
+      return;
+    }
+    const row = e.target.closest("tr[data-id]");
+    if (row) {
+      const entry = state.entries.find((x) => x.id === row.dataset.id);
+      if (entry && !entry.deleted) openModal(entry);
+    }
+  };
+
+  document.getElementById("search").oninput = (e) => {
+    state.search = e.target.value;
+    saveState();
+    renderLedger();
+  };
+  document.getElementById("filter-category").onchange = (e) => {
+    state.filterCategory = e.target.value;
+    saveState();
+    renderLedger();
+  };
+  document.getElementById("filter-method").onchange = (e) => {
+    state.filterMethod = e.target.value;
+    saveState();
+    renderLedger();
+  };
+  document.getElementById("filter-type").onchange = (e) => {
+    state.filterType = e.target.value;
+    saveState();
+    renderLedger();
+  };
+  document.querySelector("#view-ledger thead").onclick = (e) => {
+    const btn = e.target.closest("[data-sort]");
+    if (!btn) return;
+    if (state.sortKey === btn.dataset.sort) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+    else {
+      state.sortKey = btn.dataset.sort;
+      state.sortDir = "desc";
+    }
+    saveState();
+    renderLedger();
+  };
+
+  document.getElementById("budget").onchange = (e) => {
+    state.budgetsByMonth[state.selectedMonth] = e.target.value;
+    state.monthlyBudget = e.target.value;
+    bumpMeta();
+    saveState();
+    render();
+  };
+  document.getElementById("daily-cap").onchange = (e) => {
+    state.dailyCap = e.target.value;
+    bumpMeta();
+    saveState();
+    render();
+  };
+  document.getElementById("currency").onchange = (e) => {
+    state.currency = e.target.value;
+    bumpMeta();
+    saveState();
+    render();
+  };
+  document.getElementById("theme-light").onchange = (e) => {
+    state.theme = e.target.checked ? "light" : "dark";
+    saveState();
+    render();
+  };
+  document.getElementById("remind-enabled").onchange = async (e) => {
+    if (e.target.checked) {
+      const ok = await enableReminders();
+      state.remindEnabled = ok;
+      e.target.checked = ok;
+    } else {
+      state.remindEnabled = false;
+      disableReminders();
+    }
+    saveState();
+  };
+  document.getElementById("cat-caps").onchange = (e) => {
+    const input = e.target.closest("[data-cap]");
+    if (!input) return;
+    state.categoryCaps[input.dataset.cap] = input.value;
+    bumpMeta();
+    saveState();
+    renderInsights();
+  };
+  document.getElementById("template-list").onclick = (e) => {
+    const use = e.target.closest("[data-use-tpl]");
+    if (use) {
+      const t = state.templates.find((x) => x.id === use.dataset.useTpl);
+      if (t) applyTemplate(t);
+      return;
+    }
+    const del = e.target.closest("[data-del-tpl]");
+    if (del) {
+      const t = state.templates.find((x) => x.id === del.dataset.delTpl);
+      if (t) {
+        t.deleted = true;
+        t.updatedAt = Date.now();
+      } else {
+        state.templates = state.templates.filter((x) => x.id !== del.dataset.delTpl);
+      }
+      saveState();
+      renderSettings();
+    }
+  };
+
+  document.getElementById("export-csv").onclick = exportCsv;
+  document.getElementById("export-json").onclick = exportJson;
+  document.getElementById("import-json").onchange = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) importJson(file);
+    e.target.value = "";
+  };
+  document.getElementById("print-month").onclick = () => {
+    state.view = "insights";
+    saveState();
+    render();
+    window.print();
+  };
+
+  document.getElementById("modal-cancel").onclick = (e) => {
+    e.preventDefault();
+    closeModal();
+  };
+  document.getElementById("entry-form").onsubmit = (e) => {
+    e.preventDefault();
+    if (saveEntryFromForm()) {
+      closeModal();
+      render();
+    }
+  };
+  document.getElementById("quick-templates").onclick = (e) => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+    document.getElementById("note").value = decodeURIComponent(chip.dataset.note || "");
+    document.getElementById("amount").value = chip.dataset.amt;
+    document.getElementById("category").value = chip.dataset.cat;
+    document.getElementById("method").value = chip.dataset.method;
+    document.getElementById("entry-type").value = chip.dataset.type;
+  };
+
+  document.getElementById("sync-enabled").onchange = (e) => {
+    state.syncEnabled = e.target.checked;
+    if (state.syncEnabled && !pairingCode()) generatePairing();
+    saveState();
+    render();
+    syncNow();
+  };
+  document.getElementById("sync-url").onchange = (e) => {
+    state.syncUrl = e.target.value.trim().replace(/\/$/, "");
+    saveState();
+  };
+  document.getElementById("sync-code").onchange = (e) => {
+    const parsed = parsePairing(e.target.value);
+    if (parsed) {
+      state.syncId = parsed.id;
+      state.syncSecret = parsed.secret;
+      state.syncEnabled = true;
+      saveState();
+      render();
+      syncNow();
+    }
+  };
+  document.getElementById("sync-generate").onclick = async () => {
+    generatePairing();
+    try {
+      await navigator.clipboard.writeText(pairingCode());
+      toast("Pairing code copied");
+    } catch {
+      toast("Pairing created — copy it from Settings");
+    }
+    syncNow();
+  };
+  document.getElementById("sync-copy").onclick = async () => {
+    if (!pairingCode()) generatePairing();
+    try {
+      await navigator.clipboard.writeText(pairingCode());
+      toast("Pairing code copied");
+    } catch {
+      toast("Copy the pairing field manually");
+    }
+  };
+  document.getElementById("sync-now").onclick = () => syncNow();
+
+  window.addEventListener("online", () => syncNow({ silent: true }));
+  window.addEventListener("offline", () => renderSyncStatus());
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") syncNow({ silent: true });
+  });
+  setInterval(() => {
+    if (state.syncEnabled) syncNow({ silent: true });
+  }, 25000);
+
+  let installEvent = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    installEvent = e;
+    const btn = document.getElementById("install-app");
+    btn.hidden = false;
+    btn.onclick = async () => {
+      await installEvent.prompt();
+      installEvent = null;
+      btn.hidden = true;
+    };
+  });
+
+  document.addEventListener("keydown", (e) => {
+    const typing = /input|textarea|select/i.test(e.target.tagName);
+    if (e.key === "n" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      openModal({ date: state.selectedDate || todayIso() });
+    }
+    if (e.key === "/" && !typing) {
+      e.preventDefault();
+      state.view = "ledger";
+      saveState();
+      render();
+      document.getElementById("search").focus();
+    }
+    if (e.key === "Escape" && document.getElementById("entry-modal").open) closeModal();
+    if (!typing && e.key === "ArrowLeft" && e.altKey) {
+      document.getElementById("prev-month").click();
+    }
+    if (!typing && e.key === "ArrowRight" && e.altKey) {
+      document.getElementById("next-month").click();
+    }
+  });
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator) || location.protocol === "file:") return;
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+
+bind();
+saveState();
+render();
+registerServiceWorker();
+if (state.remindEnabled) enableReminders();
+if (state.syncEnabled) syncNow({ silent: true });
+if (location.protocol.startsWith("http")) {
+  fetch("/api/info")
+    .then((r) => r.json())
+    .then((info) => {
+      const remote = (info.urls || []).filter((u) => !u.includes("127.0.0.1"));
+      if (!remote.length) return;
+      if (!state.syncUrl || /127\.0\.0\.1|localhost/.test(state.syncUrl)) {
+        state.syncUrl = remote[0];
+        saveState();
+        renderSettings();
+      }
+      const detail = document.getElementById("sync-detail");
+      if (detail && !state.lastSyncAt) {
+        detail.textContent = `On your phone, open ${remote.join(" or ")} then paste the pairing code.`;
+      }
+    })
+    .catch(() => {});
+}

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f1114" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="description" content="Offline-first personal spending ledger for phone and desktop." />
+  <title>Ledger — Monthly spending</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <div>
+        <div class="brand-name">Ledger</div>
+        <p class="brand-sub" id="sync-status">On this device</p>
+      </div>
+    </div>
+
+    <div class="month-nav" role="group" aria-label="Month">
+      <button type="button" class="ghost icon-btn" id="prev-month" aria-label="Previous month">‹</button>
+      <button type="button" class="month-label" id="month-btn" aria-live="polite"></button>
+      <button type="button" class="ghost icon-btn" id="next-month" aria-label="Next month">›</button>
+    </div>
+
+    <div class="top-actions">
+      <button type="button" class="ghost" id="jump-today">Today</button>
+      <button type="button" class="primary desktop-only" id="open-add">Add expense</button>
+    </div>
+  </header>
+
+  <nav class="tabs desktop-only" aria-label="Sections">
+    <button type="button" class="tab active" data-view="overview" aria-current="page">Overview</button>
+    <button type="button" class="tab" data-view="ledger">Ledger</button>
+    <button type="button" class="tab" data-view="insights">Insights</button>
+    <button type="button" class="tab" data-view="settings">Settings</button>
+  </nav>
+
+  <p id="banner" class="banner" role="status" hidden></p>
+
+  <main id="main" tabindex="-1">
+    <section id="view-overview" class="view" aria-labelledby="overview-heading">
+      <h1 id="overview-heading" class="sr-only">Overview</h1>
+      <div class="kpi-row" id="kpis"></div>
+      <div id="budget-bar" class="budget-card" hidden>
+        <div class="budget-bar-meta">
+          <span id="budget-left"></span>
+          <span id="budget-right"></span>
+        </div>
+        <div class="bar-track" role="progressbar" id="budget-track" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div id="budget-fill" class="bar-fill"></div>
+        </div>
+        <p class="caption" id="pace-note"></p>
+      </div>
+
+      <div class="split-pane">
+        <div>
+          <div class="section-head">
+            <h2 id="cal-title">Calendar</h2>
+            <p class="caption">Tap a day to inspect. Use Add to log a purchase.</p>
+          </div>
+          <div id="calendar" class="calendar" role="grid" aria-labelledby="cal-title"></div>
+        </div>
+        <aside class="day-panel" id="day-panel" aria-labelledby="day-panel-title">
+          <div class="section-head">
+            <h2 id="day-panel-title">Day</h2>
+            <button type="button" class="ghost sm" id="day-add">Add</button>
+          </div>
+          <p class="day-total" id="day-panel-total"></p>
+          <ul id="day-panel-list" class="entry-list"></ul>
+        </aside>
+      </div>
+    </section>
+
+    <section id="view-ledger" class="view" hidden aria-labelledby="ledger-heading">
+      <h1 id="ledger-heading" class="sr-only">Ledger</h1>
+      <div class="toolbar">
+        <label class="grow sr-label">
+          <span class="sr-only">Search purchases</span>
+          <input id="search" type="search" placeholder="Search notes, category, method…" autocomplete="off" />
+        </label>
+        <label class="sr-label"><span class="sr-only">Category</span><select id="filter-category"></select></label>
+        <label class="sr-label"><span class="sr-only">Method</span><select id="filter-method"></select></label>
+        <label class="sr-label">
+          <span class="sr-only">Type</span>
+          <select id="filter-type">
+            <option value="all">All types</option>
+            <option value="expense">Expenses</option>
+            <option value="income">Income / refunds</option>
+          </select>
+        </label>
+        <button type="button" class="ghost" id="export-csv">Export CSV</button>
+      </div>
+      <p class="caption" id="ledger-meta"></p>
+      <ul id="ledger-cards" class="ledger-cards mobile-only"></ul>
+      <div class="table-wrap desktop-only">
+        <table>
+          <caption class="sr-only">Purchases this month</caption>
+          <thead>
+            <tr>
+              <th scope="col"><button type="button" class="th" data-sort="date">Date</button></th>
+              <th scope="col"><button type="button" class="th" data-sort="category">Category</button></th>
+              <th scope="col"><button type="button" class="th" data-sort="method">Method</button></th>
+              <th scope="col"><button type="button" class="th" data-sort="note">Note</button></th>
+              <th scope="col" class="num"><button type="button" class="th" data-sort="amount">Amount</button></th>
+              <th scope="col"><span class="sr-only">Remove</span></th>
+            </tr>
+          </thead>
+          <tbody id="purchases"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="view-insights" class="view" hidden aria-labelledby="insights-heading">
+      <h1 id="insights-heading" class="sr-only">Insights</h1>
+      <div class="kpi-row" id="insight-kpis"></div>
+      <div class="grid-2">
+        <article>
+          <h2>Daily spend</h2>
+          <p class="caption" id="day-caption"></p>
+          <div id="day-chart" class="day-chart" role="img" aria-labelledby="day-caption"></div>
+        </article>
+        <article>
+          <h2>By category</h2>
+          <p class="caption">Share of this month, with optional caps.</p>
+          <div id="cat-list"></div>
+        </article>
+        <article>
+          <h2>By payment method</h2>
+          <div id="method-list"></div>
+        </article>
+        <article>
+          <h2>Weekday vs weekend</h2>
+          <div id="week-split"></div>
+        </article>
+      </div>
+    </section>
+
+    <section id="view-settings" class="view" hidden aria-labelledby="settings-heading">
+      <h1 id="settings-heading" class="sr-only">Settings</h1>
+      <div class="settings-grid">
+        <article>
+          <h2>This month</h2>
+          <label>Monthly budget <input id="budget" type="number" min="0" step="1" placeholder="40000" inputmode="decimal" /></label>
+          <label>Daily cap (optional) <input id="daily-cap" type="number" min="0" step="1" placeholder="e.g. 800" inputmode="decimal" /></label>
+          <label>
+            Currency
+            <select id="currency">
+              <option value="৳">৳ Taka</option>
+              <option value="$">$ Dollar</option>
+              <option value="€">€ Euro</option>
+              <option value="£">£ Pound</option>
+            </select>
+          </label>
+        </article>
+        <article>
+          <h2>Appearance &amp; alerts</h2>
+          <label class="check">
+            <input type="checkbox" id="theme-light" />
+            Light theme
+          </label>
+          <label class="check">
+            <input type="checkbox" id="remind-enabled" />
+            Remind me at 10:30 PM (browser)
+          </label>
+          <p id="remind-status" class="status" hidden></p>
+          <button type="button" class="ghost" id="install-app" hidden>Install as app</button>
+        </article>
+        <article class="span-2">
+          <h2>Phone + desktop sync</h2>
+          <p class="caption">Entries stay on each device. When a connection is available they merge automatically. The server stores only encrypted data.</p>
+          <label class="check">
+            <input type="checkbox" id="sync-enabled" />
+            Sync when online
+          </label>
+          <label>Sync server URL <input id="sync-url" type="url" placeholder="http://192.168.0.10:8788" autocomplete="off" /></label>
+          <label>Pairing code <input id="sync-code" type="text" placeholder="LEDGER.….…" autocomplete="off" spellcheck="false" /></label>
+          <div class="btn-row">
+            <button type="button" class="ghost" id="sync-generate">Create pairing</button>
+            <button type="button" class="ghost" id="sync-copy">Copy pairing</button>
+            <button type="button" class="primary" id="sync-now">Sync now</button>
+          </div>
+          <p id="sync-detail" class="status" role="status"></p>
+        </article>
+        <article>
+          <h2>Category caps</h2>
+          <p class="caption">Leave blank for no cap. Used on Insights.</p>
+          <div id="cat-caps" class="cap-grid"></div>
+        </article>
+        <article>
+          <h2>Templates</h2>
+          <p class="caption">One-tap repeats for things you buy often.</p>
+          <ul id="template-list" class="entry-list"></ul>
+        </article>
+        <article class="span-2">
+          <h2>Backup</h2>
+          <div class="btn-row">
+            <button type="button" class="ghost" id="export-json">Download JSON</button>
+            <label class="ghost file-btn">Import JSON<input id="import-json" type="file" accept="application/json" hidden /></label>
+            <button type="button" class="ghost" id="print-month">Print month</button>
+          </div>
+          <p class="caption">Import merges by id. Pairing stays on the device unless you export JSON.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <button type="button" class="fab mobile-only" id="fab-add" aria-label="Add expense">+</button>
+
+  <nav class="dock mobile-only" aria-label="Primary">
+    <button type="button" class="dock-btn active" data-view="overview">Overview</button>
+    <button type="button" class="dock-btn" data-view="ledger">Ledger</button>
+    <button type="button" class="dock-btn" data-view="insights">Insights</button>
+    <button type="button" class="dock-btn" data-view="settings">Settings</button>
+  </nav>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <dialog id="entry-modal" aria-labelledby="modal-title">
+    <form id="entry-form" method="dialog">
+      <h2 id="modal-title">Add expense</h2>
+      <div class="form-grid">
+        <label>Date <input id="date" type="date" required /></label>
+        <label>Amount <input id="amount" type="number" min="0.01" step="0.01" placeholder="0.00" required inputmode="decimal" /></label>
+        <label>
+          Category
+          <select id="category"></select>
+        </label>
+        <label>
+          Method
+          <select id="method"></select>
+        </label>
+        <label>
+          Type
+          <select id="entry-type">
+            <option value="expense">Expense</option>
+            <option value="income">Income / refund</option>
+          </select>
+        </label>
+        <label class="wide">Note <input id="note" type="text" placeholder="What was this for?" /></label>
+      </div>
+      <div class="chips" id="quick-templates"></div>
+      <div class="modal-actions">
+        <label class="check"><input type="checkbox" id="save-template" /> Save as template</label>
+        <span class="spacer"></span>
+        <button type="button" class="ghost" id="modal-cancel">Cancel</button>
+        <button type="submit" class="primary" id="modal-save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="sync.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

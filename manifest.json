@@ -1,0 +1,19 @@
+{
+  "name": "Ledger",
+  "short_name": "Ledger",
+  "description": "Personal spending tracker for phone and desktop",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f1114",
+  "theme_color": "#0f1114",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
