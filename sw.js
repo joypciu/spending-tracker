@@ -1,8 +1,9 @@
-const CACHE = "spending-tracker-v3";
+const CACHE = "spending-tracker-v4";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
+  "./core.js",
   "./app.js",
   "./sync.js",
   "./manifest.json",
@@ -30,7 +31,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request)),
+    fetch(event.request)
+      .then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+        return res;
+      })
+      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./index.html"))),
   );
 });
 

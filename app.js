@@ -2,18 +2,13 @@ const STORAGE_KEY = "spending-tracker-v1";
 const REMIND_HOUR = 22;
 const REMIND_MINUTE = 30;
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const CATEGORIES = [
-  "Food",
-  "Groceries",
-  "Transport",
-  "Housing",
-  "Utilities",
-  "Entertainment",
-  "Health",
-  "Shopping",
-  "Other",
-];
-const METHODS = ["Cash", "bKash", "Nagad", "Card", "Bank", "Other"];
+const METHODS = LedgerCore.METHODS;
+const pad2 = LedgerCore.pad2;
+const shiftMonth = LedgerCore.shiftMonth;
+const daysInMonth = LedgerCore.daysInMonth;
+const expenseTotal = LedgerCore.expenseTotal;
+const incomeTotal = LedgerCore.incomeTotal;
+const netSpend = LedgerCore.netSpend;
 
 const DEFAULTS = {
   selectedMonth: "2026-08",
@@ -34,6 +29,8 @@ const DEFAULTS = {
   sortDir: "desc",
   categoryCaps: {},
   templates: [],
+  customCategories: [],
+  searchAllMonths: false,
   entries: [],
   syncEnabled: false,
   syncUrl: "",
@@ -60,8 +57,8 @@ let editingId = null;
 let toastTimer = null;
 let state = loadState();
 
-function pad2(n) {
-  return n < 10 ? `0${n}` : String(n);
+function categories() {
+  return LedgerCore.allCategories(state.customCategories);
 }
 
 function todayIso() {
@@ -71,16 +68,6 @@ function todayIso() {
 
 function currentMonthKey() {
   return todayIso().slice(0, 7);
-}
-
-function daysInMonth(year, month) {
-  return new Date(year, month, 0).getDate();
-}
-
-function shiftMonth(key, delta) {
-  const [y, m] = key.split("-").map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 }
 
 function monthLabel(key) {
@@ -105,12 +92,13 @@ function migrateEntry(e) {
     id: e.id || newId(),
     date: e.date,
     amount: Number(e.amount) || 0,
-    category: CATEGORIES.includes(e.category) ? e.category : "Other",
+    category: e.category || "Other",
     note: e.note || "",
     method: METHODS.includes(e.method) ? e.method : "Cash",
     type: e.type === "income" ? "income" : "expense",
     updatedAt: e.updatedAt || Date.now(),
     deleted: !!e.deleted,
+    recurringId: e.recurringId || "",
   };
 }
 
@@ -127,6 +115,7 @@ function loadState() {
       if (!merged.budgetsByMonth) merged.budgetsByMonth = {};
       if (!merged.categoryCaps) merged.categoryCaps = {};
       if (!merged.templates) merged.templates = [];
+      if (!merged.customCategories) merged.customCategories = [];
       if (!merged.deviceId) merged.deviceId = newId();
       if (!merged.syncUrl && location.protocol.startsWith("http")) {
         merged.syncUrl = location.origin;
@@ -180,20 +169,7 @@ function signedAmount(e) {
 }
 
 function monthEntries(month = state.selectedMonth) {
-  const prefix = `${month}-`;
-  return state.entries.filter((e) => !e.deleted && e.date.startsWith(prefix));
-}
-
-function expenseTotal(list) {
-  return list.filter((e) => e.type !== "income").reduce((s, e) => s + e.amount, 0);
-}
-
-function incomeTotal(list) {
-  return list.filter((e) => e.type === "income").reduce((s, e) => s + e.amount, 0);
-}
-
-function netSpend(list) {
-  return expenseTotal(list) - incomeTotal(list);
+  return LedgerCore.monthEntries(state.entries, month);
 }
 
 function toast(message, actionLabel, action) {
@@ -326,6 +302,9 @@ function openModal(preset) {
   document.getElementById("entry-type").value = preset?.type || "expense";
   document.getElementById("note").value = preset?.note || "";
   document.getElementById("save-template").checked = false;
+  document.getElementById("make-recurring").checked = !!preset?.recurringId;
+  document.getElementById("dup-warn").hidden = true;
+  fillNoteSuggest();
   renderTemplateChips();
   document.getElementById("entry-modal").showModal();
   document.getElementById("amount").focus();
@@ -334,6 +313,7 @@ function openModal(preset) {
 function closeModal() {
   document.getElementById("entry-modal").close();
   editingId = null;
+  saveEntryFromForm._force = false;
 }
 
 function saveEntryFromForm() {
@@ -350,7 +330,19 @@ function saveEntryFromForm() {
     note: document.getElementById("note").value.trim(),
     updatedAt: Date.now(),
     deleted: false,
+    recurringId: existingRecurring(),
   };
+  const dup = LedgerCore.duplicateOf(state.entries, payload);
+  if (dup && !editingId) {
+    const warn = document.getElementById("dup-warn");
+    warn.hidden = false;
+    warn.textContent = `Looks like a duplicate of ${dup.note || dup.category} on ${dup.date}. Save again to keep both.`;
+    if (!saveEntryFromForm._force) {
+      saveEntryFromForm._force = true;
+      return false;
+    }
+  }
+  saveEntryFromForm._force = false;
   if (editingId) {
     state.entries = state.entries.map((e) => (e.id === editingId ? payload : e));
     toast("Entry updated");
@@ -412,27 +404,64 @@ function applyTemplate(t) {
   });
 }
 
-function filteredLedger() {
-  const q = (state.search || "").trim().toLowerCase();
-  let rows = monthEntries();
-  if (state.filterCategory !== "all") rows = rows.filter((e) => e.category === state.filterCategory);
-  if (state.filterMethod !== "all") rows = rows.filter((e) => e.method === state.filterMethod);
-  if (state.filterType !== "all") rows = rows.filter((e) => e.type === state.filterType);
-  if (q) {
-    rows = rows.filter((e) =>
-      `${e.note} ${e.category} ${e.method} ${e.amount}`.toLowerCase().includes(q),
-    );
+function existingRecurring() {
+  const checked = document.getElementById("make-recurring").checked;
+  if (!checked) return "";
+  if (editingId) {
+    const live = state.entries.find((e) => e.id === editingId);
+    if (live && live.recurringId) return live.recurringId;
   }
-  const dir = state.sortDir === "asc" ? 1 : -1;
-  rows.sort((a, b) => {
-    let av = a[state.sortKey];
-    let bv = b[state.sortKey];
-    if (state.sortKey === "amount") return (a.amount - b.amount) * dir;
-    av = String(av || "");
-    bv = String(bv || "");
-    return av.localeCompare(bv) * dir;
+  return newId();
+}
+
+function fillNoteSuggest() {
+  const list = document.getElementById("note-suggest");
+  const seen = new Set();
+  const notes = [];
+  for (const e of state.entries) {
+    const n = (e.note || "").trim();
+    if (!n || seen.has(n.toLowerCase())) continue;
+    seen.add(n.toLowerCase());
+    notes.push(n);
+    if (notes.length >= 40) break;
+  }
+  list.innerHTML = notes.map((n) => `<option value="${escapeHtml(n)}"></option>`).join("");
+}
+
+function refreshCategorySelects() {
+  fillSelect(document.getElementById("category"), categories());
+  fillSelect(document.getElementById("filter-category"), categories(), "All categories");
+}
+
+function applyPendingRecurring() {
+  const pending = LedgerCore.pendingRecurring(state.entries, state.selectedMonth);
+  for (const src of pending) {
+    const copy = LedgerCore.copyRecurring(src, state.selectedMonth);
+    state.entries.unshift({
+      ...copy,
+      id: newId(),
+      updatedAt: Date.now(),
+      deleted: false,
+    });
+  }
+  if (pending.length) {
+    toast(`Added ${pending.length} recurring charge${pending.length === 1 ? "" : "s"}`);
+    saveState();
+    render();
+  }
+}
+
+function filteredLedger() {
+  return LedgerCore.filterLedger(state.entries, {
+    month: state.selectedMonth,
+    search: state.search,
+    allMonths: state.searchAllMonths,
+    filterCategory: state.filterCategory,
+    filterMethod: state.filterMethod,
+    filterType: state.filterType,
+    sortKey: state.sortKey,
+    sortDir: state.sortDir,
   });
-  return rows;
 }
 
 function loggingStreak() {
@@ -543,9 +572,10 @@ function renderBudgetBar() {
   const expected = (budget / days) * elapsed;
   const vsPace = net - expected;
   document.getElementById("pace-note").textContent =
-    vsPace > 0
+    (vsPace > 0
       ? `${formatMoney(vsPace)} ahead of even daily pace.`
-      : `${formatMoney(-vsPace)} under even daily pace.`;
+      : `${formatMoney(-vsPace)} under even daily pace.`) +
+    ` Projected month-end: ${formatMoney(LedgerCore.forecastMonthEnd(net, state.selectedMonth, todayIso()).projected)}.`;
 }
 
 function renderCalendar() {
@@ -619,7 +649,7 @@ function renderDayPanel() {
 function renderLedger() {
   const rows = filteredLedger();
   const spent = expenseTotal(rows);
-  document.getElementById("ledger-meta").textContent = `${rows.length} rows · ${formatMoney(spent)} expenses in view`;
+  document.getElementById("ledger-meta").textContent = `${rows.length} rows · ${formatMoney(spent)} expenses in view${state.searchAllMonths ? " · all months" : ""}`;
   const tableHtml = rows
     .map(
       (e) => `<tr data-id="${e.id}">
@@ -715,12 +745,54 @@ function renderInsights() {
   `;
 
   const daysLogged = new Set(list.map((e) => e.date)).size;
+  const forecast = LedgerCore.forecastMonthEnd(spent, state.selectedMonth, todayIso());
   document.getElementById("insight-kpis").innerHTML = `
     <div class="kpi"><div class="value">${formatMoney(spent)}</div><div class="label">Expenses</div></div>
     <div class="kpi"><div class="value">${daysLogged}</div><div class="label">Days with activity</div></div>
-    <div class="kpi"><div class="value">${formatMoney(weekday / Math.max(1, list.filter((e) => e.type !== "income" && ![0, 6].includes(new Date(`${e.date}T12:00:00`).getDay())).length))}</div><div class="label">Avg weekday ticket</div></div>
+    <div class="kpi"><div class="value">${formatMoney(forecast.projected)}</div><div class="label">Projected month-end</div></div>
     <div class="kpi"><div class="value">${formatMoney(incomeTotal(list))}</div><div class="label">Refunds / income</div></div>
   `;
+
+  const trend = LedgerCore.monthTrend(state.entries, state.selectedMonth, 6);
+  const tMax = Math.max(...trend.map((t) => t.spent), 1);
+  const trendEl = document.getElementById("trend-chart");
+  if (trendEl) {
+    trendEl.innerHTML = trend
+      .map((t) => {
+        const h = t.spent > 0 ? Math.max(4, (t.spent / tMax) * 128) : 0;
+        const label = t.month.slice(5);
+        return `<div class="col" title="${t.month}: ${formatMoney(t.spent)}"><div class="bar" style="height:${h}px"></div><div class="lbl">${label}</div></div>`;
+      })
+      .join("");
+  }
+
+  const merchants = new Map();
+  for (const e of list) {
+    if (e.type === "income") continue;
+    const key = LedgerCore.merchantKey(e.note) || e.category;
+    merchants.set(key, (merchants.get(key) || 0) + e.amount);
+  }
+  const topMerch = [...merchants.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const unusual = LedgerCore.unusualDays(daily, 2).slice(0, 3);
+  const prevSpent = expenseTotal(monthEntries(shiftMonth(state.selectedMonth, -1)));
+  const notes = [];
+  if (forecast.projected && monthBudget() && forecast.projected > monthBudget()) {
+    notes.push(`On this pace you will overshoot the ${formatMoney(monthBudget())} budget.`);
+  }
+  if (prevSpent > 0) {
+    const dlt = ((spent - prevSpent) / prevSpent) * 100;
+    notes.push(`${dlt >= 0 ? "+" : ""}${dlt.toFixed(0)}% vs ${monthLabel(shiftMonth(state.selectedMonth, -1))}.`);
+  }
+  for (const [day, amt] of unusual) {
+    notes.push(`Day ${day} was unusually high at ${formatMoney(amt)}.`);
+  }
+  if (topMerch[0]) notes.push(`Largest note cluster: ${topMerch[0][0]} (${formatMoney(topMerch[0][1])}).`);
+  const smart = document.getElementById("smart-notes");
+  if (smart) {
+    smart.innerHTML = notes.length
+      ? notes.map((n) => `<li><div>${escapeHtml(n)}</div></li>`).join("")
+      : `<li><div class="meta">Log a few more days and this panel will call out pace, spikes, and repeats.</div></li>`;
+  }
 }
 
 function renderSettings() {
@@ -733,7 +805,7 @@ function renderSettings() {
   document.getElementById("sync-url").value = state.syncUrl || "";
   document.getElementById("sync-code").value = pairingCode();
   const templates = state.templates.filter((t) => !t.deleted);
-  document.getElementById("cat-caps").innerHTML = CATEGORIES.map(
+  document.getElementById("cat-caps").innerHTML = categories().map(
     (c) =>
       `<label>${c}<input type="number" min="0" data-cap="${c}" placeholder="no cap" value="${state.categoryCaps[c] || ""}" /></label>`,
   ).join("");
@@ -757,6 +829,11 @@ function render() {
   document.documentElement.dataset.theme = state.theme === "light" ? "light" : "dark";
   document.querySelector('meta[name="theme-color"]').content = state.theme === "light" ? "#f4f2ee" : "#0f1114";
   document.getElementById("month-btn").textContent = monthLabel(state.selectedMonth);
+  const monthPick = document.getElementById("month-pick");
+  if (monthPick) monthPick.value = state.selectedMonth;
+  const hash = `#${state.view}`;
+  if (location.hash !== hash) history.replaceState(null, "", hash);
+  refreshCategorySelects();
   renderSyncStatus();
   for (const tab of document.querySelectorAll("[data-view]")) {
     const on = tab.dataset.view === state.view;
@@ -773,10 +850,20 @@ function render() {
   document.getElementById("filter-category").value = state.filterCategory;
   document.getElementById("filter-method").value = state.filterMethod;
   document.getElementById("filter-type").value = state.filterType;
+  const allMonths = document.getElementById("search-all");
+  if (allMonths) allMonths.checked = !!state.searchAllMonths;
 
   const today = todayIso();
   const loggedToday = state.entries.some((e) => !e.deleted && e.date === today && e.type !== "income");
   setBanner(loggedToday ? "" : "Nothing logged today. Add purchases as they happen so 10:30 PM is only a backup.");
+  const pending = LedgerCore.pendingRecurring(state.entries, state.selectedMonth);
+  const recBar = document.getElementById("recurring-bar");
+  if (recBar) {
+    recBar.hidden = pending.length === 0;
+    document.getElementById("recurring-text").textContent = pending.length
+      ? `${pending.length} monthly repeat${pending.length === 1 ? "" : "s"} from earlier months can be copied into ${monthLabel(state.selectedMonth)}.`
+      : "";
+  }
 
   renderKpis();
   renderBudgetBar();
@@ -944,10 +1031,9 @@ function generatePairing() {
 }
 
 function bind() {
-  fillSelect(document.getElementById("category"), CATEGORIES);
   fillSelect(document.getElementById("method"), METHODS);
-  fillSelect(document.getElementById("filter-category"), CATEGORIES, "All categories");
   fillSelect(document.getElementById("filter-method"), METHODS, "All methods");
+  refreshCategorySelects();
 
   document.getElementById("prev-month").onclick = () => {
     state.selectedMonth = shiftMonth(state.selectedMonth, -1);
@@ -962,8 +1048,15 @@ function bind() {
     render();
   };
   document.getElementById("month-btn").onclick = () => {
-    state.selectedMonth = currentMonthKey();
-    state.selectedDate = todayIso();
+    const el = document.getElementById("month-pick");
+    el.value = state.selectedMonth;
+    if (el.showPicker) el.showPicker();
+    else el.focus();
+  };
+  document.getElementById("month-pick").onchange = (e) => {
+    if (!e.target.value) return;
+    state.selectedMonth = e.target.value;
+    state.selectedDate = `${state.selectedMonth}-01`;
     saveState();
     render();
   };
@@ -1210,6 +1303,73 @@ function bind() {
     }
   };
   document.getElementById("sync-now").onclick = () => syncNow();
+  document.getElementById("apply-recurring").onclick = applyPendingRecurring;
+  document.getElementById("search-all").onchange = (e) => {
+    state.searchAllMonths = e.target.checked;
+    saveState();
+    renderLedger();
+  };
+  document.getElementById("add-category-form").onsubmit = (e) => {
+    e.preventDefault();
+    const name = document.getElementById("new-category").value.trim();
+    if (!name) return;
+    if (!state.customCategories.includes(name) && !LedgerCore.BASE_CATEGORIES.includes(name)) {
+      state.customCategories.push(name);
+      bumpMeta();
+      saveState();
+    }
+    document.getElementById("new-category").value = "";
+    render();
+    toast(`Category ${name} ready`);
+  };
+
+  const palette = document.getElementById("palette");
+  const paletteQ = document.getElementById("palette-q");
+  const paletteList = document.getElementById("palette-list");
+  const paletteCommands = () => [
+    { id: "add", label: "Add expense", run: () => openModal({ date: state.selectedDate || todayIso() }) },
+    { id: "overview", label: "Go to Overview", run: () => { state.view = "overview"; saveState(); render(); } },
+    { id: "ledger", label: "Go to Ledger", run: () => { state.view = "ledger"; saveState(); render(); } },
+    { id: "insights", label: "Go to Insights", run: () => { state.view = "insights"; saveState(); render(); } },
+    { id: "settings", label: "Go to Settings", run: () => { state.view = "settings"; saveState(); render(); } },
+    { id: "today", label: "Jump to today", run: () => document.getElementById("jump-today").click() },
+    { id: "sync", label: "Sync now", run: () => syncNow() },
+    { id: "export", label: "Export JSON backup", run: exportJson },
+    { id: "theme", label: "Toggle light theme", run: () => { state.theme = state.theme === "light" ? "dark" : "light"; saveState(); render(); } },
+  ];
+  function renderPalette() {
+    const q = (paletteQ.value || "").toLowerCase();
+    const items = paletteCommands().filter((c) => c.label.toLowerCase().includes(q));
+    paletteList.innerHTML = items
+      .map((c, i) => `<li><button type="button" class="${i === 0 ? "active" : ""}" data-cmd="${c.id}">${escapeHtml(c.label)}</button></li>`)
+      .join("");
+  }
+  function runPalette(id) {
+    const cmd = paletteCommands().find((c) => c.id === id);
+    palette.close();
+    if (cmd) cmd.run();
+  }
+  paletteQ.oninput = renderPalette;
+  paletteList.onclick = (e) => {
+    const btn = e.target.closest("[data-cmd]");
+    if (btn) runPalette(btn.dataset.cmd);
+  };
+  paletteQ.onkeydown = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const first = paletteList.querySelector("[data-cmd]");
+      if (first) runPalette(first.dataset.cmd);
+    }
+  };
+
+  window.addEventListener("hashchange", () => {
+    const v = (location.hash || "").replace("#", "");
+    if (["overview", "ledger", "insights", "settings"].includes(v) && state.view !== v) {
+      state.view = v;
+      saveState();
+      render();
+    }
+  });
 
   window.addEventListener("online", () => syncNow({ silent: true }));
   window.addEventListener("offline", () => renderSyncStatus());
@@ -1246,6 +1406,15 @@ function bind() {
       render();
       document.getElementById("search").focus();
     }
+    if (e.key === "k" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      renderPalette();
+      palette.showModal();
+      paletteQ.value = "";
+      renderPalette();
+      paletteQ.focus();
+    }
+    if (e.key === "Escape" && palette.open) palette.close();
     if (e.key === "Escape" && document.getElementById("entry-modal").open) closeModal();
     if (!typing && e.key === "ArrowLeft" && e.altKey) {
       document.getElementById("prev-month").click();
@@ -1262,6 +1431,8 @@ function registerServiceWorker() {
 }
 
 bind();
+const bootHash = (location.hash || "").replace("#", "");
+if (["overview", "ledger", "insights", "settings"].includes(bootHash)) state.view = bootHash;
 saveState();
 render();
 registerServiceWorker();

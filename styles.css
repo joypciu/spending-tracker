@@ -132,14 +132,40 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   font-weight: 600;
 }
 
-.banner {
-  margin: 12px 22px 0;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  background: var(--fill);
-  color: var(--warn);
-  font-size: 13px;
+.banner.ok-banner { color: var(--ok); display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+.check.compact { flex-direction: row; align-items: center; gap: 6px; margin: 0; color: var(--text); font-size: 13px; }
+.month-pick-wrap { position: relative; min-width: 180px; }
+.month-pick-wrap input[type="month"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
 }
+.inline-form { display: flex; gap: 8px; align-items: flex-end; }
+.inline-form label { flex: 1; margin-bottom: 0; }
+#palette {
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  color: var(--text);
+  padding: 12px;
+  width: min(480px, calc(100vw - 24px));
+}
+#palette::backdrop { background: var(--overlay); }
+#palette-q { width: 100%; margin-bottom: 8px; }
+.palette-list { list-style: none; margin: 0; padding: 0; max-height: 280px; overflow: auto; }
+.palette-list button {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  min-height: 40px;
+  padding: 8px 10px;
+}
+.palette-list button.active, .palette-list button:hover { background: var(--fill); }
+.day-chart.trend { height: 160px; }
 .status { font-size: 12px; margin: 8px 0 0; }
 .status.ok { color: var(--ok); }
 .status.warn { color: var(--warn); }

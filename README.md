@@ -24,5 +24,15 @@ On a phone on the same Wi-Fi, use the LAN URL printed in the terminal. Install f
 ## Tests
 
 ```bash
-node test.cjs
+python test_core.py
+python test_server.py
 ```
+
+Open http://127.0.0.1:8788/ and walk Overview → Ledger → Insights → Settings. Add an expense, search, toggle theme (Ctrl+K), and confirm the page still works with the network off after the first visit.
+
+## New in this revision
+
+- Month picker, command palette (Ctrl+K), hash routes
+- Recurring monthly charges, duplicate warning, custom categories
+- All-months search, six-month trend, projected month-end, smart notes
+- Stale-while-revalidate service worker so updates land while offline still works

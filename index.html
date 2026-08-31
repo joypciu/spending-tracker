@@ -28,7 +28,11 @@
 
     <div class="month-nav" role="group" aria-label="Month">
       <button type="button" class="ghost icon-btn" id="prev-month" aria-label="Previous month">‹</button>
-      <button type="button" class="month-label" id="month-btn" aria-live="polite"></button>
+      <label class="month-pick-wrap">
+        <span class="sr-only">Jump to month</span>
+        <input type="month" id="month-pick" />
+        <button type="button" class="month-label" id="month-btn" aria-live="polite"></button>
+      </label>
       <button type="button" class="ghost icon-btn" id="next-month" aria-label="Next month">›</button>
     </div>
 
@@ -46,6 +50,10 @@
   </nav>
 
   <p id="banner" class="banner" role="status" hidden></p>
+  <p id="recurring-bar" class="banner ok-banner" hidden>
+    <span id="recurring-text"></span>
+    <button type="button" class="ghost sm" id="apply-recurring">Apply this month</button>
+  </p>
 
   <main id="main" tabindex="-1">
     <section id="view-overview" class="view" aria-labelledby="overview-heading">
@@ -98,6 +106,10 @@
             <option value="income">Income / refunds</option>
           </select>
         </label>
+        <label class="check compact">
+          <input type="checkbox" id="search-all" />
+          All months
+        </label>
         <button type="button" class="ghost" id="export-csv">Export CSV</button>
       </div>
       <p class="caption" id="ledger-meta"></p>
@@ -142,6 +154,15 @@
           <h2>Weekday vs weekend</h2>
           <div id="week-split"></div>
         </article>
+        <article>
+          <h2>Six-month trend</h2>
+          <p class="caption">Expense totals ending at the month on screen.</p>
+          <div id="trend-chart" class="day-chart trend"></div>
+        </article>
+        <article>
+          <h2>Smart notes</h2>
+          <ul id="smart-notes" class="entry-list"></ul>
+        </article>
       </div>
     </section>
 
@@ -161,6 +182,10 @@
               <option value="£">£ Pound</option>
             </select>
           </label>
+          <form id="add-category-form" class="inline-form">
+            <label>Custom category <input id="new-category" type="text" placeholder="e.g. Pets" maxlength="32" /></label>
+            <button type="submit" class="ghost">Add</button>
+          </form>
         </article>
         <article>
           <h2>Appearance &amp; alerts</h2>
@@ -174,6 +199,7 @@
           </label>
           <p id="remind-status" class="status" hidden></p>
           <button type="button" class="ghost" id="install-app" hidden>Install as app</button>
+          <p class="caption">Shortcuts: Ctrl+N add · / search · Ctrl+K command palette · Alt+←/→ month</p>
         </article>
         <article class="span-2">
           <h2>Phone + desktop sync</h2>
@@ -225,6 +251,11 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
+  <dialog id="palette" aria-label="Command palette">
+    <input id="palette-q" type="search" placeholder="Jump, add, search, sync…" autocomplete="off" />
+    <ul id="palette-list" class="palette-list"></ul>
+  </dialog>
+
   <dialog id="entry-modal" aria-labelledby="modal-title">
     <form id="entry-form" method="dialog">
       <h2 id="modal-title">Add expense</h2>
@@ -246,11 +277,14 @@
             <option value="income">Income / refund</option>
           </select>
         </label>
-        <label class="wide">Note <input id="note" type="text" placeholder="What was this for?" /></label>
+        <label class="wide">Note <input id="note" type="text" placeholder="What was this for?" list="note-suggest" /></label>
       </div>
+      <datalist id="note-suggest"></datalist>
+      <p id="dup-warn" class="status warn" hidden></p>
       <div class="chips" id="quick-templates"></div>
       <div class="modal-actions">
         <label class="check"><input type="checkbox" id="save-template" /> Save as template</label>
+        <label class="check"><input type="checkbox" id="make-recurring" /> Repeat monthly</label>
         <span class="spacer"></span>
         <button type="button" class="ghost" id="modal-cancel">Cancel</button>
         <button type="submit" class="primary" id="modal-save">Save</button>
@@ -258,6 +292,7 @@
     </form>
   </dialog>
 
+  <script src="core.js"></script>
   <script src="sync.js"></script>
   <script src="app.js"></script>
 </body>

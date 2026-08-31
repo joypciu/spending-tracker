@@ -73,6 +73,7 @@ const LedgerSync = (() => {
       dailyCap: state.dailyCap,
       currency: state.currency,
       categoryCaps: state.categoryCaps,
+      customCategories: state.customCategories,
       metaUpdatedAt: state.metaUpdatedAt || 0,
     };
   }
@@ -92,6 +93,9 @@ const LedgerSync = (() => {
       categoryCaps: useRemoteMeta
         ? { ...local.categoryCaps, ...remote.categoryCaps }
         : { ...remote.categoryCaps, ...local.categoryCaps },
+      customCategories: useRemoteMeta
+        ? [...new Set([...(remote.customCategories || []), ...(local.customCategories || [])])]
+        : [...new Set([...(local.customCategories || []), ...(remote.customCategories || [])])],
       metaUpdatedAt: Math.max(local.metaUpdatedAt || 0, remote.metaUpdatedAt || 0),
     };
   }
@@ -104,6 +108,7 @@ const LedgerSync = (() => {
     state.dailyCap = doc.dailyCap ?? state.dailyCap;
     state.currency = doc.currency || state.currency;
     state.categoryCaps = doc.categoryCaps || {};
+    state.customCategories = doc.customCategories || state.customCategories || [];
     state.metaUpdatedAt = doc.metaUpdatedAt || 0;
   }
 
