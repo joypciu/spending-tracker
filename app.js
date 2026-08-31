@@ -35,6 +35,7 @@ const DEFAULTS = {
   customMethods: [],
   recurringSkipped: {},
   pinHash: "",
+  idleLockMinutes: 5,
   startingBalances: {},
   nagDismissedDate: "",
   searchAllMonths: false,
@@ -63,7 +64,6 @@ let undo = null;
 let modalSnap = "";
 let calendarFollow = true;
 let idleLockTimer = null;
-const IDLE_LOCK_MS = 5 * 60 * 1000;
 let editingId = null;
 let toastTimer = null;
 let state = loadState();
@@ -1063,6 +1063,7 @@ function renderSettings() {
   document.getElementById("sync-url").value = state.syncUrl || "";
   document.getElementById("sync-code").value = pairingCode();
   document.getElementById("pin-clear").hidden = !state.pinHash;
+  document.getElementById("idle-lock-min").value = state.idleLockMinutes ?? 5;
   const templates = state.templates.filter((t) => !t.deleted);
   document.getElementById("cat-caps").innerHTML = categories().map(
     (c) =>
@@ -1211,11 +1212,19 @@ function lockNow() {
   showLockGate();
 }
 
+function idleLockMs() {
+  const n = Number(state.idleLockMinutes);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(240, Math.max(1, n)) * 60 * 1000;
+}
+
 function armIdleLock() {
   if (idleLockTimer) clearTimeout(idleLockTimer);
   idleLockTimer = null;
   if (!state.pinHash || !pinUnlocked()) return;
-  idleLockTimer = setTimeout(lockNow, IDLE_LOCK_MS);
+  const ms = idleLockMs();
+  if (!ms) return;
+  idleLockTimer = setTimeout(lockNow, ms);
 }
 
 function download(name, body, type) {
@@ -1747,6 +1756,12 @@ function bind() {
     status.hidden = false;
     status.className = "status ok";
     status.textContent = "PIN saved on this device.";
+    armIdleLock();
+  };
+  document.getElementById("idle-lock-min").onchange = (e) => {
+    const n = Number(e.target.value);
+    state.idleLockMinutes = Number.isFinite(n) ? Math.max(0, Math.min(240, n)) : 5;
+    saveState();
     armIdleLock();
   };
   document.getElementById("pin-clear").onclick = () => {

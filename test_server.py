@@ -61,7 +61,7 @@ def main() -> None:
                 time.sleep(0.15)
         assert last and last[0] == 200, "home page did not load"
         html = last[1].decode("utf-8", "replace")
-        for needle in ("core.js", "view-overview", "palette", "search-all", "make-recurring", "lock-gate", "wallets", "skip-recurring", "repeat-last", "dismiss-banner", "wallet-starts", "amount-chips", "modal-duplicate", "clear-filters", "density-compact", "copy-summary", "week-start", "date-locale", "amount-up"):
+        for needle in ("core.js", "view-overview", "palette", "search-all", "make-recurring", "lock-gate", "wallets", "skip-recurring", "repeat-last", "dismiss-banner", "wallet-starts", "amount-chips", "modal-duplicate", "clear-filters", "density-compact", "copy-summary", "week-start", "date-locale", "amount-up", "idle-lock-min"):
             assert needle in html, f"missing {needle} in index"
 
         code, css = get("/styles.css")

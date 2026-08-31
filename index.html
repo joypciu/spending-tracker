@@ -236,12 +236,13 @@
           <button type="button" class="ghost" id="install-app" hidden>Install as app</button>
           <p class="caption">Shortcuts: 1–4 views · Ctrl+N add · R repeat last · Ctrl+Z undo · / search · Ctrl+K palette · Alt+←/→ month</p>
           <h2>This device lock</h2>
-          <p class="caption">Optional PIN hides the ledger until you unlock this browser. After 5 idle minutes it locks again. It is not synced.</p>
+          <p class="caption">Optional PIN hides the ledger until you unlock this browser. It is not synced.</p>
           <form id="pin-form" class="inline-form">
             <label>PIN <input id="pin-input" type="password" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="4–8 digits" /></label>
             <button type="submit" class="ghost" id="pin-save">Set PIN</button>
             <button type="button" class="ghost" id="pin-clear" hidden>Remove PIN</button>
           </form>
+          <label>Lock after idle minutes (0 = never) <input id="idle-lock-min" type="number" min="0" max="240" step="1" /></label>
           <p id="pin-status" class="status" hidden></p>
         </article>
         <article class="span-2">
