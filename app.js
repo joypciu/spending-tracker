@@ -58,6 +58,7 @@ const SEED_ENTRIES = [
 
 let remindTimer = null;
 let undo = null;
+let modalSnap = "";
 let editingId = null;
 let toastTimer = null;
 let state = loadState();
@@ -354,12 +355,60 @@ function openModal(preset) {
   renderAmountChips();
   document.getElementById("entry-modal").showModal();
   document.getElementById("amount").focus();
+  modalSnap = snapshotModal();
 }
 
-function closeModal() {
-  document.getElementById("entry-modal").close();
+function snapshotModal() {
+  return [
+    document.getElementById("date").value,
+    document.getElementById("amount").value,
+    document.getElementById("category").value,
+    document.getElementById("method").value,
+    document.getElementById("entry-type").value,
+    document.getElementById("note").value,
+    String(document.getElementById("save-template").checked),
+    String(document.getElementById("make-recurring").checked),
+  ].join("\0");
+}
+
+function closeModal(force) {
+  const dialog = document.getElementById("entry-modal");
+  if (!force && dialog.open && snapshotModal() !== modalSnap) {
+    if (!window.confirm("Discard this entry?")) return false;
+  }
+  dialog.close();
   editingId = null;
   saveEntryFromForm._force = false;
+  return true;
+}
+
+function monthSummaryText() {
+  const list = monthEntries();
+  const spent = expenseTotal(list);
+  const income = incomeTotal(list);
+  const cats = new Map();
+  for (const e of list) {
+    if (e.type === "income") continue;
+    cats.set(e.category, (cats.get(e.category) || 0) + e.amount);
+  }
+  const top = [...cats.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const lines = [
+    `Ledger · ${monthLabel(state.selectedMonth)}`,
+    `Spent ${formatMoney(spent)}`,
+    income ? `Income ${formatMoney(income)}` : "",
+    `Net ${formatMoney(spent - income)}`,
+    top.length ? `Top: ${top.map(([n, v]) => `${n} ${formatMoney(v)}`).join(", ")}` : "",
+  ].filter(Boolean);
+  return lines.join("\n");
+}
+
+async function copyMonthSummary() {
+  try {
+    await navigator.clipboard.writeText(monthSummaryText());
+    toast("Month summary copied");
+  } catch {
+    toast("Could not copy — select and copy from Insights");
+  }
 }
 
 function saveEntryFromForm() {
@@ -1485,6 +1534,8 @@ function bind() {
     if (file) importJson(file);
     e.target.value = "";
   };
+  document.getElementById("copy-summary").onclick = copyMonthSummary;
+  document.getElementById("copy-summary-settings").onclick = copyMonthSummary;
   document.getElementById("print-month").onclick = () => {
     state.view = "insights";
     saveState();
@@ -1492,6 +1543,10 @@ function bind() {
     window.print();
   };
 
+  document.getElementById("entry-modal").addEventListener("cancel", (e) => {
+    e.preventDefault();
+    closeModal();
+  });
   document.getElementById("modal-cancel").onclick = (e) => {
     e.preventDefault();
     closeModal();
@@ -1499,7 +1554,7 @@ function bind() {
   document.getElementById("modal-duplicate").onclick = (e) => {
     e.preventDefault();
     const src = editingId ? state.entries.find((x) => x.id === editingId) : null;
-    closeModal();
+    closeModal(true);
     if (!src) return;
     openModal({
       date: state.selectedDate || src.date || todayIso(),
@@ -1517,7 +1572,7 @@ function bind() {
     saveBtn.disabled = true;
     try {
       if (saveEntryFromForm()) {
-        closeModal();
+        closeModal(true);
         render();
       }
     } finally {
@@ -1696,6 +1751,7 @@ function bind() {
     { id: "insights", label: "Go to Insights", run: () => { state.view = "insights"; saveState(); render(); } },
     { id: "settings", label: "Go to Settings", run: () => { state.view = "settings"; saveState(); render(); } },
     { id: "repeat", label: "Repeat last expense", run: repeatLast },
+    { id: "summary", label: "Copy month summary", run: copyMonthSummary },
     { id: "today", label: "Jump to today", run: () => document.getElementById("jump-today").click() },
     { id: "sync", label: "Sync now", run: () => syncNow() },
     { id: "export", label: "Export JSON backup", run: exportJson },
@@ -1788,7 +1844,6 @@ function bind() {
       paletteQ.focus();
     }
     if (e.key === "Escape" && palette.open) palette.close();
-    if (e.key === "Escape" && document.getElementById("entry-modal").open) closeModal();
     if (e.key === "Escape" && !typing && state.view === "ledger" && filtersActive()) {
       e.preventDefault();
       clearFilters();

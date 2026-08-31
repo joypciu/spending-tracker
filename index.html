@@ -38,6 +38,7 @@
 
     <div class="top-actions">
       <button type="button" class="ghost" id="jump-today">Today</button>
+      <button type="button" class="ghost desktop-only" id="copy-summary">Copy summary</button>
       <button type="button" class="ghost desktop-only" id="repeat-last">Repeat last</button>
       <button type="button" class="primary desktop-only" id="open-add">Add expense</button>
     </div>
@@ -265,6 +266,7 @@
             <label class="check compact"><input type="checkbox" id="export-pairing" /> Include pairing secrets</label>
             <button type="button" class="ghost" id="export-json">Download JSON</button>
             <label class="ghost file-btn">Import JSON<input id="import-json" type="file" accept="application/json" hidden /></label>
+            <button type="button" class="ghost" id="copy-summary-settings">Copy month summary</button>
             <button type="button" class="ghost" id="print-month">Print month</button>
           </div>
           <p class="caption">Import merges by id. Pairing stays on the device unless you export JSON.</p>
