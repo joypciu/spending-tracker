@@ -174,6 +174,23 @@ function jumpSelectedDay(delta) {
   render();
 }
 
+function openOverviewDay(iso) {
+  state.selectedDate = iso;
+  state.selectedMonth = iso.slice(0, 7);
+  state.view = "overview";
+  calendarFollow = true;
+  saveState();
+  render();
+}
+
+function openLedgerFilter(field, value) {
+  if (field === "category") state.filterCategory = value;
+  else if (field === "method") state.filterMethod = value;
+  state.view = "ledger";
+  saveState();
+  render();
+}
+
 function newId() {
   return crypto.randomUUID ? crypto.randomUUID() : `e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -1022,12 +1039,12 @@ function renderInsights() {
   const spent = expenseTotal(list);
   const maxDay = Math.max(...daily.values(), 1);
   const cap = Number.parseFloat(state.dailyCap);
-  document.getElementById("day-caption").textContent = `Daily expense totals · ${monthLabel(state.selectedMonth)}`;
+  document.getElementById("day-caption").textContent = `Daily totals · ${monthLabel(state.selectedMonth)} · tap a day to open it`;
   document.getElementById("day-chart").innerHTML = Array.from({ length: dayCount }, (_, i) => {
     const v = daily.get(i + 1) || 0;
     const h = v > 0 ? Math.max(3, (v / maxDay) * 128) : 0;
     const over = Number.isFinite(cap) && cap > 0 && v > cap;
-    return `<div class="col" title="Day ${i + 1}: ${formatMoney(v)}"><div class="bar ${over ? "over" : ""}" style="height:${h}px"></div><div class="lbl">${i + 1}</div></div>`;
+    return `<button type="button" class="col" data-day="${i + 1}" title="Day ${i + 1}: ${formatMoney(v)}"><div class="bar ${over ? "over" : ""}" style="height:${h}px"></div><div class="lbl">${i + 1}</div></button>`;
   }).join("");
 
   const cats = new Map();
@@ -1050,7 +1067,7 @@ function renderInsights() {
             if (value > capN) cls += " over";
             else if (value > capN * 0.8) cls += " warn";
           }
-          return `<div class="cat-row"><div>${name}</div><div class="track"><div class="${cls}" style="width:${(value / catMax) * 100}%"></div></div><div class="num">${formatMoney(value)}${extra}</div></div>`;
+          return `<button type="button" class="cat-row" data-filter-cat="${escapeHtml(name)}"><div>${escapeHtml(name)}</div><div class="track"><div class="${cls}" style="width:${(value / catMax) * 100}%"></div></div><div class="num">${formatMoney(value)}${extra}</div></button>`;
         })
         .join("")
     : `<p class="caption">No expenses this month yet.</p>`;
@@ -1061,7 +1078,7 @@ function renderInsights() {
     ? mRanked
         .map(
           ([name, value]) =>
-            `<div class="method-row cat-row"><div>${name}</div><div class="track"><div class="fill" style="width:${(value / mMax) * 100}%"></div></div><div class="num">${formatMoney(value)}</div></div>`,
+            `<button type="button" class="method-row cat-row" data-filter-method="${escapeHtml(name)}"><div>${escapeHtml(name)}</div><div class="track"><div class="fill" style="width:${(value / mMax) * 100}%"></div></div><div class="num">${formatMoney(value)}</div></button>`,
         )
         .join("")
     : `<p class="caption">No expenses this month yet.</p>`;
@@ -1089,7 +1106,7 @@ function renderInsights() {
       .map((t) => {
         const h = t.spent > 0 ? Math.max(4, (t.spent / tMax) * 128) : 0;
         const label = t.month.slice(5);
-        return `<div class="col" title="${t.month}: ${formatMoney(t.spent)}"><div class="bar" style="height:${h}px"></div><div class="lbl">${label}</div></div>`;
+        return `<button type="button" class="col" data-month="${t.month}" title="${t.month}: ${formatMoney(t.spent)}"><div class="bar" style="height:${h}px"></div><div class="lbl">${label}</div></button>`;
       })
       .join("");
   }
@@ -1526,6 +1543,31 @@ function bind() {
     state.selectedDate = btn.dataset.iso;
     openModal({ date: btn.dataset.iso });
   });
+
+  document.getElementById("day-chart").onclick = (e) => {
+    const col = e.target.closest("[data-day]");
+    if (!col) return;
+    openOverviewDay(`${state.selectedMonth}-${pad2(Number(col.dataset.day))}`);
+  };
+  document.getElementById("cat-list").onclick = (e) => {
+    const row = e.target.closest("[data-filter-cat]");
+    if (row) openLedgerFilter("category", row.dataset.filterCat);
+  };
+  document.getElementById("method-list").onclick = (e) => {
+    const row = e.target.closest("[data-filter-method]");
+    if (row) openLedgerFilter("method", row.dataset.filterMethod);
+  };
+  document.getElementById("trend-chart").onclick = (e) => {
+    const col = e.target.closest("[data-month]");
+    if (!col) return;
+    const month = col.dataset.month;
+    const today = todayIso();
+    state.selectedMonth = month;
+    state.selectedDate = today.startsWith(`${month}-`) ? today : `${month}-01`;
+    calendarFollow = true;
+    saveState();
+    render();
+  };
 
   document.getElementById("day-panel-list").onclick = (e) => {
     const edit = e.target.closest("[data-edit]");

@@ -423,6 +423,12 @@ td { max-width: 280px; overflow-wrap: anywhere; }
   flex-direction: column;
   justify-content: flex-end;
   align-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
 }
 .col .bar { width: 100%; background: var(--accent); }
 .col .bar.over { background: var(--danger); }
@@ -434,6 +440,14 @@ td { max-width: 280px; overflow-wrap: anywhere; }
   align-items: center;
   margin-bottom: 8px;
   font-size: 13px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 4px 0;
 }
 .track { height: 6px; background: var(--fill); }
 .fill { height: 100%; background: var(--accent); }
