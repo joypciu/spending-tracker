@@ -567,6 +567,9 @@ dialog::backdrop { background: var(--overlay); }
   gap: 10px;
 }
 .form-grid .wide { grid-column: 1 / -1; }
+.amount-row { display: flex; gap: 6px; align-items: center; }
+.amount-row input { flex: 1; min-width: 0; }
+.amount-row .icon-btn { min-width: 44px; flex: 0 0 auto; }
 .form-grid label, #entry-form label {
   display: flex;
   flex-direction: column;

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="bn" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -323,7 +323,13 @@
       <h2 id="modal-title">Add expense</h2>
       <div class="form-grid">
         <label>Date <input id="date" type="date" required /></label>
-        <label>Amount <input id="amount" type="number" min="0.01" step="0.01" placeholder="0.00" required inputmode="decimal" /></label>
+        <label class="amount-field">Amount
+          <span class="amount-row">
+            <button type="button" class="ghost icon-btn" id="amount-down" aria-label="Decrease amount">−</button>
+            <input id="amount" type="number" min="0.01" step="0.01" placeholder="0.00" required inputmode="decimal" />
+            <button type="button" class="ghost icon-btn" id="amount-up" aria-label="Increase amount">+</button>
+          </span>
+        </label>
         <label>
           Category
           <select id="category"></select>

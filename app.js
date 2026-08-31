@@ -417,6 +417,15 @@ async function copyMonthSummary() {
   }
 }
 
+function nudgeAmount(dir) {
+  const el = document.getElementById("amount");
+  const step = state.currency === "৳" ? 10 : 1;
+  const n = Number.parseFloat(el.value);
+  const base = Number.isFinite(n) ? n : 0;
+  el.value = String(Math.max(0, Math.round((base + dir * step) * 100) / 100));
+  el.focus();
+}
+
 function saveEntryFromForm() {
   if (saveEntryFromForm._busy) return false;
   saveEntryFromForm._busy = true;
@@ -1587,6 +1596,8 @@ function bind() {
       recurringId: src.recurringId,
     });
   };
+  document.getElementById("amount-down").onclick = () => nudgeAmount(-1);
+  document.getElementById("amount-up").onclick = () => nudgeAmount(1);
   document.getElementById("entry-form").onsubmit = (e) => {
     e.preventDefault();
     const saveBtn = document.getElementById("modal-save");
@@ -1879,6 +1890,7 @@ function bind() {
       state.view = ["overview", "ledger", "insights", "settings"][Number(e.key) - 1];
       saveState();
       render();
+      if (state.view === "ledger") document.getElementById("search").focus();
     }
     if (!blocked && state.view === "overview" && !e.altKey && !e.ctrlKey && !e.metaKey) {
       if (e.key === "ArrowLeft") {
