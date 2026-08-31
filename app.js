@@ -824,10 +824,10 @@ function renderKpis() {
     state.entries.filter((e) => !e.deleted && e.date === LedgerCore.shiftIso(today, -1)),
   );
   document.getElementById("kpis").innerHTML = `
-    <div class="kpi"><div class="value">${formatMoney(spent)}</div><div class="label">Spent · ${monthLabel(state.selectedMonth)}</div>${delta != null ? `<div class="delta">${delta >= 0 ? "+" : ""}${delta.toFixed(0)}% vs last month</div>` : ""}</div>
-    <div class="kpi"><div class="value">${formatMoney(today.startsWith(prefix) ? todaySpent : 0)}</div><div class="label">Spent today</div><div class="delta">${loggingStreak()} day streak · yesterday ${formatMoney(yestSpent)}</div></div>
-    <div class="kpi"><div class="value">${formatMoney(LedgerCore.trailingSpend(state.entries, today, 7))}</div><div class="label">Last 7 days</div><div class="delta">${formatMoney(avg)} / day this month</div></div>
-    <div class="kpi ${remainTone}"><div class="value">${budget ? formatMoney(remaining) : formatMoney(net)}</div><div class="label">${budget ? "Budget remaining" : "Net spend"}</div>${income ? `<div class="delta">${formatMoney(income)} in refunds</div>` : ""}</div>
+    <button type="button" class="kpi" data-kpi="ledger"><div class="value">${formatMoney(spent)}</div><div class="label">Spent · ${monthLabel(state.selectedMonth)}</div>${delta != null ? `<div class="delta">${delta >= 0 ? "+" : ""}${delta.toFixed(0)}% vs last month</div>` : ""}</button>
+    <button type="button" class="kpi" data-kpi="today"><div class="value">${formatMoney(today.startsWith(prefix) ? todaySpent : 0)}</div><div class="label">Spent today</div><div class="delta">${loggingStreak()} day streak · yesterday ${formatMoney(yestSpent)}</div></button>
+    <button type="button" class="kpi" data-kpi="insights"><div class="value">${formatMoney(LedgerCore.trailingSpend(state.entries, today, 7))}</div><div class="label">Last 7 days</div><div class="delta">${formatMoney(avg)} / day this month</div></button>
+    <button type="button" class="kpi ${remainTone}" data-kpi="settings"><div class="value">${budget ? formatMoney(remaining) : formatMoney(net)}</div><div class="label">${budget ? "Budget remaining" : "Net spend"}</div>${income ? `<div class="delta">${formatMoney(income)} in refunds</div>` : ""}</button>
   `;
   renderWallets();
 }
@@ -1591,6 +1591,27 @@ function bind() {
     calendarFollow = true;
     saveState();
     render();
+  };
+  document.getElementById("kpis").onclick = (e) => {
+    const kpi = e.target.closest("[data-kpi]");
+    if (!kpi) return;
+    const kind = kpi.dataset.kpi;
+    if (kind === "today") {
+      openOverviewDay(todayIso());
+      openModal({ date: todayIso() });
+      return;
+    }
+    if (kind === "ledger") {
+      state.view = "ledger";
+      saveState();
+      render();
+      return;
+    }
+    if (kind === "insights" || kind === "settings") {
+      state.view = kind;
+      saveState();
+      render();
+    }
   };
   document.getElementById("open-add").onclick = () => openModal({ date: state.selectedDate || todayIso() });
   document.getElementById("empty-add").onclick = () => openModal({ date: state.selectedDate || todayIso() });
