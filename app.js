@@ -90,6 +90,7 @@ let idleLockTimer = null;
 let editingId = null;
 let toastTimer = null;
 let confirmAction = null;
+let smartActions = [];
 let state = loadState();
 
 function categories() {
@@ -1144,20 +1145,42 @@ function renderInsights() {
   const prevSpent = expenseTotal(monthEntries(shiftMonth(state.selectedMonth, -1)));
   const notes = [];
   if (forecast.projected && monthBudget() && forecast.projected > monthBudget()) {
-    notes.push(`On this pace you will overshoot the ${formatMoney(monthBudget())} budget.`);
+    notes.push({
+      text: `On this pace you will overshoot the ${formatMoney(monthBudget())} budget.`,
+      view: "settings",
+    });
   }
   if (prevSpent > 0) {
     const dlt = ((spent - prevSpent) / prevSpent) * 100;
-    notes.push(`${dlt >= 0 ? "+" : ""}${dlt.toFixed(0)}% vs ${monthLabel(shiftMonth(state.selectedMonth, -1))}.`);
+    notes.push({
+      text: `${dlt >= 0 ? "+" : ""}${dlt.toFixed(0)}% vs ${monthLabel(shiftMonth(state.selectedMonth, -1))}.`,
+    });
   }
   for (const [day, amt] of unusual) {
-    notes.push(`Day ${day} was unusually high at ${formatMoney(amt)}.`);
+    notes.push({
+      text: `Day ${day} was unusually high at ${formatMoney(amt)}.`,
+      iso: `${state.selectedMonth}-${pad2(day)}`,
+    });
   }
-  if (topMerch[0]) notes.push(`Largest note cluster: ${topMerch[0][0]} (${formatMoney(topMerch[0][1])}).`);
+  if (topMerch[0]) {
+    notes.push({
+      text: `Largest note cluster: ${topMerch[0][0]} (${formatMoney(topMerch[0][1])}).`,
+      search: topMerch[0][0],
+    });
+  }
   const smart = document.getElementById("smart-notes");
   if (smart) {
+    smartActions = notes;
     smart.innerHTML = notes.length
-      ? notes.map((n) => `<li><div>${escapeHtml(n)}</div></li>`).join("")
+      ? notes
+          .map((n, i) => {
+            const jump = n.iso || n.search || n.view;
+            const body = escapeHtml(n.text);
+            return jump
+              ? `<li><button type="button" class="link" data-smart="${i}">${body}</button></li>`
+              : `<li><div>${body}</div></li>`;
+          })
+          .join("")
       : `<li><div class="meta">Log a few more days and this panel will call out pace, spikes, and repeats.</div></li>`;
   }
 }
@@ -1624,6 +1647,29 @@ function bind() {
     calendarFollow = true;
     saveState();
     render();
+  };
+  document.getElementById("smart-notes").onclick = (e) => {
+    const btn = e.target.closest("[data-smart]");
+    if (!btn) return;
+    const n = smartActions[Number(btn.dataset.smart)];
+    if (!n) return;
+    if (n.iso) {
+      openOverviewDay(n.iso);
+      return;
+    }
+    if (n.search) {
+      state.search = n.search;
+      state.filterCategory = "all";
+      state.view = "ledger";
+      saveState();
+      render();
+      return;
+    }
+    if (n.view) {
+      state.view = n.view;
+      saveState();
+      render();
+    }
   };
 
   document.getElementById("day-panel-list").onclick = (e) => {
@@ -2099,6 +2145,18 @@ function bind() {
       if (active) runPalette(active.dataset.cmd);
     }
   };
+
+  window.addEventListener("dragover", (e) => {
+    const types = e.dataTransfer && e.dataTransfer.types;
+    if (types && [...types].includes("Files")) e.preventDefault();
+  });
+  window.addEventListener("drop", (e) => {
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!file || !/\.json$/i.test(file.name)) return;
+    e.preventDefault();
+    if (document.getElementById("lock-gate")?.open) return;
+    importJson(file);
+  });
 
   window.addEventListener("hashchange", () => {
     const v = (location.hash || "").replace("#", "");
