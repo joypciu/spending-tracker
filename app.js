@@ -1097,6 +1097,7 @@ function render() {
   document.documentElement.dataset.density = state.density === "compact" ? "compact" : "comfortable";
   document.querySelector('meta[name="theme-color"]').content = state.theme === "light" ? "#f4f2ee" : "#0f1114";
   document.getElementById("month-btn").textContent = monthLabel(state.selectedMonth);
+  document.title = `Ledger · ${formatMoney(expenseTotal(monthEntries()))} · ${monthLabel(state.selectedMonth)}`;
   const monthPick = document.getElementById("month-pick");
   if (monthPick) monthPick.value = state.selectedMonth;
   const hash = `#${state.view}`;
