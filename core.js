@@ -22,6 +22,18 @@ const LedgerCore = (() => {
     return (jsWeekday - s + 7) % 7;
   }
 
+  function loggingStreak(entries, today) {
+    const dates = new Set((entries || []).filter((e) => !e.deleted && e.date).map((e) => e.date));
+    let iso = today;
+    if (!dates.has(iso)) iso = shiftIso(iso, -1);
+    let n = 0;
+    while (dates.has(iso)) {
+      n += 1;
+      iso = shiftIso(iso, -1);
+    }
+    return n;
+  }
+
   function shiftIso(iso, deltaDays) {
     const d = new Date(`${iso}T12:00:00`);
     if (Number.isNaN(d.getTime())) return iso;
@@ -255,6 +267,7 @@ const LedgerCore = (() => {
     gridOffset,
     shiftMonth,
     shiftIso,
+    loggingStreak,
     trailingSpend,
     daysInMonth,
     expenseTotal,

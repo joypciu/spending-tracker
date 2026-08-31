@@ -6,6 +6,16 @@ def pad2(n: int) -> str:
     return f"0{n}" if n < 10 else str(n)
 
 
+def logging_streak(entries, today: str) -> int:
+    dates = {e["date"] for e in entries if not e.get("deleted") and e.get("date")}
+    iso = today if today in dates else shift_iso(today, -1)
+    n = 0
+    while iso in dates:
+        n += 1
+        iso = shift_iso(iso, -1)
+    return n
+
+
 def shift_iso(iso: str, delta: int) -> str:
     y, m, d = map(int, iso.split("-"))
     nxt = date(y, m, d) + timedelta(days=delta)
@@ -90,6 +100,11 @@ def main() -> None:
     assert sat[0] == "Sat"
     assert shift_iso("2026-08-31", 1) == "2026-09-01"
     assert shift_iso("2026-09-01", -1) == "2026-08-31"
+    assert logging_streak(
+        [{"date": "2026-08-30"}, {"date": "2026-08-29"}],
+        "2026-08-31",
+    ) == 2
+    assert logging_streak([{"date": "2026-08-31"}, {"date": "2026-08-30"}], "2026-08-31") == 2
     assert 800 - 95 == 705
     assert shift_month("2026-08", 1) == "2026-09"
     assert days_in_month(2026, 2) == 28

@@ -636,19 +636,7 @@ function filteredLedger() {
 }
 
 function loggingStreak() {
-  const dates = new Set(state.entries.filter((e) => !e.deleted).map((e) => e.date));
-  let d = new Date();
-  let n = 0;
-  for (;;) {
-    const iso = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-    if (dates.has(iso)) {
-      n += 1;
-      d.setDate(d.getDate() - 1);
-    } else {
-      break;
-    }
-  }
-  return n;
+  return LedgerCore.loggingStreak(state.entries, todayIso());
 }
 
 function renderAmountChips() {
