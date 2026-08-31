@@ -67,17 +67,35 @@ const LedgerCore = (() => {
     });
   }
 
-  function allCategories(custom) {
+  function mergeNamed(base, custom) {
     const extra = (custom || []).map((c) => String(c).trim()).filter(Boolean);
-    const seen = new Set(BASE_CATEGORIES);
-    const out = BASE_CATEGORIES.slice();
+    const seen = new Set(base);
+    const out = base.slice();
     for (const c of extra) {
       if (!seen.has(c)) {
         seen.add(c);
-        out.splice(out.length - 1, 0, c);
+        out.splice(Math.max(0, out.length - 1), 0, c);
       }
     }
     return out;
+  }
+
+  function allCategories(custom) {
+    return mergeNamed(BASE_CATEGORIES, custom);
+  }
+
+  function allMethods(custom) {
+    return mergeNamed(METHODS, custom);
+  }
+
+  function methodBalances(entries, month) {
+    const map = new Map();
+    for (const e of monthEntries(entries, month)) {
+      const key = e.method || "Other";
+      const signed = e.type === "income" ? -Number(e.amount || 0) : Number(e.amount || 0);
+      map.set(key, (map.get(key) || 0) + signed);
+    }
+    return [...map.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
   }
 
   function merchantKey(note) {
@@ -100,7 +118,7 @@ const LedgerCore = (() => {
       .sort((a, b) => b[1] - a[1]);
   }
 
-  function pendingRecurring(entries, month) {
+  function pendingRecurring(entries, month, skipped) {
     const thisMonth = new Set(
       monthEntries(entries, month)
         .filter((e) => e.recurringId)
@@ -111,6 +129,8 @@ const LedgerCore = (() => {
       if (e.deleted || !e.recurringId || e.type === "income") continue;
       if (e.date && e.date.slice(0, 7) >= month) continue;
       if (thisMonth.has(e.recurringId)) continue;
+      const skip = skipped && skipped[e.recurringId];
+      if (Array.isArray(skip) && skip.includes(month)) continue;
       const prev = seen.get(e.recurringId);
       if (!prev || e.date > prev.date) seen.set(e.recurringId, e);
     }
@@ -181,6 +201,8 @@ const LedgerCore = (() => {
     forecastMonthEnd,
     duplicateOf,
     allCategories,
+    allMethods,
+    methodBalances,
     merchantKey,
     unusualDays,
     pendingRecurring,

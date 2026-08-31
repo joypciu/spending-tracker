@@ -74,6 +74,8 @@ const LedgerSync = (() => {
       currency: state.currency,
       categoryCaps: state.categoryCaps,
       customCategories: state.customCategories,
+      customMethods: state.customMethods,
+      recurringSkipped: state.recurringSkipped,
       metaUpdatedAt: state.metaUpdatedAt || 0,
     };
   }
@@ -96,6 +98,12 @@ const LedgerSync = (() => {
       customCategories: useRemoteMeta
         ? [...new Set([...(remote.customCategories || []), ...(local.customCategories || [])])]
         : [...new Set([...(local.customCategories || []), ...(remote.customCategories || [])])],
+      customMethods: useRemoteMeta
+        ? [...new Set([...(remote.customMethods || []), ...(local.customMethods || [])])]
+        : [...new Set([...(local.customMethods || []), ...(remote.customMethods || [])])],
+      recurringSkipped: useRemoteMeta
+        ? { ...(local.recurringSkipped || {}), ...(remote.recurringSkipped || {}) }
+        : { ...(remote.recurringSkipped || {}), ...(local.recurringSkipped || {}) },
       metaUpdatedAt: Math.max(local.metaUpdatedAt || 0, remote.metaUpdatedAt || 0),
     };
   }
@@ -109,6 +117,8 @@ const LedgerSync = (() => {
     state.currency = doc.currency || state.currency;
     state.categoryCaps = doc.categoryCaps || {};
     state.customCategories = doc.customCategories || state.customCategories || [];
+    state.customMethods = doc.customMethods || state.customMethods || [];
+    state.recurringSkipped = doc.recurringSkipped || state.recurringSkipped || {};
     state.metaUpdatedAt = doc.metaUpdatedAt || 0;
   }
 

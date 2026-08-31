@@ -57,7 +57,7 @@ def duplicate_of(entries, candidate):
     return None
 
 
-def pending_recurring(entries, month):
+def pending_recurring(entries, month, skipped=None):
     this_month = {e["recurringId"] for e in month_entries(entries, month) if e.get("recurringId")}
     seen = {}
     for e in entries:
@@ -67,6 +67,8 @@ def pending_recurring(entries, month):
         if str(e.get("date", ""))[:7] >= month:
             continue
         if rid in this_month:
+            continue
+        if skipped and rid in skipped and month in skipped[rid]:
             continue
         prev = seen.get(rid)
         if not prev or e["date"] > prev["date"]:
@@ -95,6 +97,8 @@ def main() -> None:
         "2026-08",
     )
     assert already == []
+    skipped = pending_recurring(entries, "2026-08", {"r1": ["2026-08"]})
+    assert skipped == []
     print("ok — core logic checks passed")
 
 

@@ -132,7 +132,27 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   font-weight: 600;
 }
 
-.banner.ok-banner { color: var(--ok); display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+.wallet-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+.wallet {
+  border: 1px solid var(--line);
+  background: var(--kpi);
+  color: var(--text);
+  min-height: 44px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.wallet span { font-size: 11px; color: var(--muted); }
+.wallet strong { font-size: 14px; }
+#lock-gate { width: min(360px, calc(100vw - 24px)); padding: 18px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); }
+#lock-gate form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); margin: 12px 0; }
 .check.compact { flex-direction: row; align-items: center; gap: 6px; margin: 0; color: var(--text); font-size: 13px; }
 .month-pick-wrap { position: relative; min-width: 180px; }
 .month-pick-wrap input[type="month"] {

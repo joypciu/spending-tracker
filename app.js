@@ -2,7 +2,6 @@ const STORAGE_KEY = "spending-tracker-v1";
 const REMIND_HOUR = 22;
 const REMIND_MINUTE = 30;
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const METHODS = LedgerCore.METHODS;
 const pad2 = LedgerCore.pad2;
 const shiftMonth = LedgerCore.shiftMonth;
 const daysInMonth = LedgerCore.daysInMonth;
@@ -30,6 +29,9 @@ const DEFAULTS = {
   categoryCaps: {},
   templates: [],
   customCategories: [],
+  customMethods: [],
+  recurringSkipped: {},
+  pinHash: "",
   searchAllMonths: false,
   entries: [],
   syncEnabled: false,
@@ -59,6 +61,10 @@ let state = loadState();
 
 function categories() {
   return LedgerCore.allCategories(state.customCategories);
+}
+
+function methods() {
+  return LedgerCore.allMethods(state.customMethods);
 }
 
 function todayIso() {
@@ -94,7 +100,7 @@ function migrateEntry(e) {
     amount: Number(e.amount) || 0,
     category: e.category || "Other",
     note: e.note || "",
-    method: METHODS.includes(e.method) ? e.method : "Cash",
+    method: e.method || "Cash",
     type: e.type === "income" ? "income" : "expense",
     updatedAt: e.updatedAt || Date.now(),
     deleted: !!e.deleted,
@@ -116,6 +122,8 @@ function loadState() {
       if (!merged.categoryCaps) merged.categoryCaps = {};
       if (!merged.templates) merged.templates = [];
       if (!merged.customCategories) merged.customCategories = [];
+      if (!merged.customMethods) merged.customMethods = [];
+      if (!merged.recurringSkipped) merged.recurringSkipped = {};
       if (!merged.deviceId) merged.deviceId = newId();
       if (!merged.syncUrl && location.protocol.startsWith("http")) {
         merged.syncUrl = location.origin;
@@ -431,10 +439,47 @@ function fillNoteSuggest() {
 function refreshCategorySelects() {
   fillSelect(document.getElementById("category"), categories());
   fillSelect(document.getElementById("filter-category"), categories(), "All categories");
+  fillSelect(document.getElementById("method"), methods());
+  fillSelect(document.getElementById("filter-method"), methods(), "All methods");
+}
+
+function lastLiveExpense() {
+  return state.entries.find((e) => !e.deleted && e.type !== "income");
+}
+
+function repeatLast() {
+  const last = lastLiveExpense();
+  if (!last) {
+    toast("Nothing to repeat yet");
+    return;
+  }
+  openModal({
+    date: state.selectedDate || todayIso(),
+    amount: last.amount,
+    category: last.category,
+    method: last.method,
+    type: last.type,
+    note: last.note,
+    recurringId: last.recurringId,
+  });
+}
+
+function skipPendingRecurring() {
+  const pending = LedgerCore.pendingRecurring(state.entries, state.selectedMonth, state.recurringSkipped);
+  if (!state.recurringSkipped) state.recurringSkipped = {};
+  for (const src of pending) {
+    const list = state.recurringSkipped[src.recurringId] || [];
+    if (!list.includes(state.selectedMonth)) list.push(state.selectedMonth);
+    state.recurringSkipped[src.recurringId] = list;
+  }
+  bumpMeta();
+  saveState();
+  render();
+  toast("Skipped repeats for this month");
 }
 
 function applyPendingRecurring() {
-  const pending = LedgerCore.pendingRecurring(state.entries, state.selectedMonth);
+  const pending = LedgerCore.pendingRecurring(state.entries, state.selectedMonth, state.recurringSkipped);
   for (const src of pending) {
     const copy = LedgerCore.copyRecurring(src, state.selectedMonth);
     state.entries.unshift({
@@ -542,6 +587,25 @@ function renderKpis() {
     <div class="kpi"><div class="value">${formatMoney(avg)}</div><div class="label">Average / day so far</div></div>
     <div class="kpi ${remainTone}"><div class="value">${budget ? formatMoney(remaining) : formatMoney(net)}</div><div class="label">${budget ? "Budget remaining" : "Net spend"}</div>${income ? `<div class="delta">${formatMoney(income)} in refunds</div>` : ""}</div>
   `;
+  renderWallets(list);
+}
+
+function renderWallets(list) {
+  const el = document.getElementById("wallets");
+  if (!el) return;
+  const rows = LedgerCore.methodBalances(list, state.selectedMonth);
+  if (!rows.length) {
+    el.hidden = true;
+    el.innerHTML = "";
+    return;
+  }
+  el.hidden = false;
+  el.innerHTML = rows
+    .map(
+      ([name, value]) =>
+        `<button type="button" class="wallet" data-method="${escapeHtml(name)}"><span>${escapeHtml(name)}</span><strong>${formatMoney(value)}</strong></button>`,
+    )
+    .join("");
 }
 
 function renderBudgetBar() {
@@ -804,6 +868,7 @@ function renderSettings() {
   document.getElementById("sync-enabled").checked = !!state.syncEnabled;
   document.getElementById("sync-url").value = state.syncUrl || "";
   document.getElementById("sync-code").value = pairingCode();
+  document.getElementById("pin-clear").hidden = !state.pinHash;
   const templates = state.templates.filter((t) => !t.deleted);
   document.getElementById("cat-caps").innerHTML = categories().map(
     (c) =>
@@ -856,7 +921,7 @@ function render() {
   const today = todayIso();
   const loggedToday = state.entries.some((e) => !e.deleted && e.date === today && e.type !== "income");
   setBanner(loggedToday ? "" : "Nothing logged today. Add purchases as they happen so 10:30 PM is only a backup.");
-  const pending = LedgerCore.pendingRecurring(state.entries, state.selectedMonth);
+  const pending = LedgerCore.pendingRecurring(state.entries, state.selectedMonth, state.recurringSkipped);
   const recBar = document.getElementById("recurring-bar");
   if (recBar) {
     recBar.hidden = pending.length === 0;
@@ -886,11 +951,42 @@ function exportCsv() {
 }
 
 function exportJson() {
-  download(
-    `ledger-backup-${todayIso()}.json`,
-    JSON.stringify(state, null, 2),
-    "application/json",
+  const dump = { ...state };
+  dump.pinHash = "";
+  if (!document.getElementById("export-pairing")?.checked) {
+    dump.syncSecret = "";
+    dump.syncId = "";
+    dump.syncUrl = dump.syncUrl;
+  }
+  download(`ledger-backup-${todayIso()}.json`, JSON.stringify(dump, null, 2), "application/json");
+}
+
+async function hashPin(pin) {
+  const buf = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`ledger-pin:${state.deviceId}:${pin}`),
   );
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function pinUnlocked() {
+  if (!state.pinHash) return true;
+  try {
+    return sessionStorage.getItem("ledger-unlocked") === state.pinHash;
+  } catch {
+    return false;
+  }
+}
+
+function showLockGate() {
+  const gate = document.getElementById("lock-gate");
+  if (!gate || pinUnlocked()) return;
+  if (!gate.open) gate.showModal();
+}
+
+function hideLockGate() {
+  const gate = document.getElementById("lock-gate");
+  if (gate?.open) gate.close();
 }
 
 function download(name, body, type) {
@@ -914,6 +1010,8 @@ function importJson(file) {
       state.entries = [...byId.values()].sort((a, b) => b.date.localeCompare(a.date));
       if (data.monthlyBudget) state.monthlyBudget = data.monthlyBudget;
       if (data.templates) state.templates = data.templates;
+      if (Array.isArray(data.customMethods)) state.customMethods = data.customMethods;
+      if (Array.isArray(data.customCategories)) state.customCategories = data.customCategories;
       saveState();
       render();
       toast(`Imported ${incoming.length} entries`);
@@ -1031,8 +1129,6 @@ function generatePairing() {
 }
 
 function bind() {
-  fillSelect(document.getElementById("method"), METHODS);
-  fillSelect(document.getElementById("filter-method"), METHODS, "All methods");
   refreshCategorySelects();
 
   document.getElementById("prev-month").onclick = () => {
@@ -1070,6 +1166,7 @@ function bind() {
   document.getElementById("open-add").onclick = () => openModal({ date: state.selectedDate || todayIso() });
   document.getElementById("fab-add").onclick = () => openModal({ date: state.selectedDate || todayIso() });
   document.getElementById("day-add").onclick = () => openModal({ date: state.selectedDate || todayIso() });
+  document.getElementById("day-repeat").onclick = repeatLast;
 
   const onNav = (e) => {
     const tab = e.target.closest("[data-view]");
@@ -1304,6 +1401,84 @@ function bind() {
   };
   document.getElementById("sync-now").onclick = () => syncNow();
   document.getElementById("apply-recurring").onclick = applyPendingRecurring;
+  document.getElementById("skip-recurring").onclick = skipPendingRecurring;
+  document.getElementById("repeat-last").onclick = repeatLast;
+  document.getElementById("wallets").onclick = (e) => {
+    const btn = e.target.closest("[data-method]");
+    if (!btn) return;
+    state.filterMethod = btn.dataset.method;
+    state.view = "ledger";
+    saveState();
+    render();
+  };
+  document.getElementById("add-method-form").onsubmit = (e) => {
+    e.preventDefault();
+    const name = document.getElementById("new-method").value.trim();
+    if (!name) return;
+    if (!state.customMethods.includes(name) && !LedgerCore.METHODS.includes(name)) {
+      state.customMethods.push(name);
+      bumpMeta();
+      saveState();
+    }
+    document.getElementById("new-method").value = "";
+    render();
+    toast(`Method ${name} ready`);
+  };
+  document.getElementById("pin-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const pin = document.getElementById("pin-input").value.trim();
+    const status = document.getElementById("pin-status");
+    if (!/^\d{4,8}$/.test(pin)) {
+      status.hidden = false;
+      status.className = "status warn";
+      status.textContent = "Use 4 to 8 digits.";
+      return;
+    }
+    state.pinHash = await hashPin(pin);
+    try {
+      sessionStorage.setItem("ledger-unlocked", state.pinHash);
+    } catch {
+      /* ignore */
+    }
+    document.getElementById("pin-input").value = "";
+    saveState();
+    render();
+    status.hidden = false;
+    status.className = "status ok";
+    status.textContent = "PIN saved on this device.";
+  };
+  document.getElementById("pin-clear").onclick = () => {
+    state.pinHash = "";
+    try {
+      sessionStorage.removeItem("ledger-unlocked");
+    } catch {
+      /* ignore */
+    }
+    saveState();
+    render();
+    hideLockGate();
+    toast("PIN removed");
+  };
+  document.getElementById("unlock-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const pin = document.getElementById("unlock-pin").value.trim();
+    const err = document.getElementById("unlock-error");
+    if ((await hashPin(pin)) === state.pinHash) {
+      try {
+        sessionStorage.setItem("ledger-unlocked", state.pinHash);
+      } catch {
+        /* ignore */
+      }
+      err.hidden = true;
+      hideLockGate();
+      return;
+    }
+    err.hidden = false;
+    err.textContent = "That PIN does not match.";
+  };
+  document.getElementById("lock-gate").addEventListener("cancel", (e) => {
+    if (!pinUnlocked()) e.preventDefault();
+  });
   document.getElementById("search-all").onchange = (e) => {
     state.searchAllMonths = e.target.checked;
     saveState();
@@ -1332,6 +1507,7 @@ function bind() {
     { id: "ledger", label: "Go to Ledger", run: () => { state.view = "ledger"; saveState(); render(); } },
     { id: "insights", label: "Go to Insights", run: () => { state.view = "insights"; saveState(); render(); } },
     { id: "settings", label: "Go to Settings", run: () => { state.view = "settings"; saveState(); render(); } },
+    { id: "repeat", label: "Repeat last expense", run: repeatLast },
     { id: "today", label: "Jump to today", run: () => document.getElementById("jump-today").click() },
     { id: "sync", label: "Sync now", run: () => syncNow() },
     { id: "export", label: "Export JSON backup", run: exportJson },
@@ -1436,6 +1612,7 @@ if (["overview", "ledger", "insights", "settings"].includes(bootHash)) state.vie
 saveState();
 render();
 registerServiceWorker();
+showLockGate();
 if (state.remindEnabled) enableReminders();
 if (state.syncEnabled) syncNow({ silent: true });
 if (location.protocol.startsWith("http")) {

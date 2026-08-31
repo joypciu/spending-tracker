@@ -38,6 +38,7 @@
 
     <div class="top-actions">
       <button type="button" class="ghost" id="jump-today">Today</button>
+      <button type="button" class="ghost desktop-only" id="repeat-last">Repeat last</button>
       <button type="button" class="primary desktop-only" id="open-add">Add expense</button>
     </div>
   </header>
@@ -52,7 +53,10 @@
   <p id="banner" class="banner" role="status" hidden></p>
   <p id="recurring-bar" class="banner ok-banner" hidden>
     <span id="recurring-text"></span>
-    <button type="button" class="ghost sm" id="apply-recurring">Apply this month</button>
+    <span class="btn-row">
+      <button type="button" class="ghost sm" id="skip-recurring">Skip</button>
+      <button type="button" class="ghost sm" id="apply-recurring">Apply this month</button>
+    </span>
   </p>
 
   <main id="main" tabindex="-1">
@@ -69,6 +73,7 @@
         </div>
         <p class="caption" id="pace-note"></p>
       </div>
+      <div id="wallets" class="wallet-row" hidden></div>
 
       <div class="split-pane">
         <div>
@@ -81,6 +86,7 @@
         <aside class="day-panel" id="day-panel" aria-labelledby="day-panel-title">
           <div class="section-head">
             <h2 id="day-panel-title">Day</h2>
+            <button type="button" class="ghost sm" id="day-repeat">Repeat last</button>
             <button type="button" class="ghost sm" id="day-add">Add</button>
           </div>
           <p class="day-total" id="day-panel-total"></p>
@@ -186,6 +192,10 @@
             <label>Custom category <input id="new-category" type="text" placeholder="e.g. Pets" maxlength="32" /></label>
             <button type="submit" class="ghost">Add</button>
           </form>
+          <form id="add-method-form" class="inline-form">
+            <label>Custom method <input id="new-method" type="text" placeholder="e.g. Rocket" maxlength="24" /></label>
+            <button type="submit" class="ghost">Add</button>
+          </form>
         </article>
         <article>
           <h2>Appearance &amp; alerts</h2>
@@ -200,6 +210,14 @@
           <p id="remind-status" class="status" hidden></p>
           <button type="button" class="ghost" id="install-app" hidden>Install as app</button>
           <p class="caption">Shortcuts: Ctrl+N add · / search · Ctrl+K command palette · Alt+←/→ month</p>
+          <h2>This device lock</h2>
+          <p class="caption">Optional PIN hides the ledger until you unlock this browser. It is not synced.</p>
+          <form id="pin-form" class="inline-form">
+            <label>PIN <input id="pin-input" type="password" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="4–8 digits" /></label>
+            <button type="submit" class="ghost" id="pin-save">Set PIN</button>
+            <button type="button" class="ghost" id="pin-clear" hidden>Remove PIN</button>
+          </form>
+          <p id="pin-status" class="status" hidden></p>
         </article>
         <article class="span-2">
           <h2>Phone + desktop sync</h2>
@@ -230,6 +248,7 @@
         <article class="span-2">
           <h2>Backup</h2>
           <div class="btn-row">
+            <label class="check compact"><input type="checkbox" id="export-pairing" /> Include pairing secrets</label>
             <button type="button" class="ghost" id="export-json">Download JSON</button>
             <label class="ghost file-btn">Import JSON<input id="import-json" type="file" accept="application/json" hidden /></label>
             <button type="button" class="ghost" id="print-month">Print month</button>
@@ -250,6 +269,18 @@
   </nav>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <dialog id="lock-gate" aria-labelledby="lock-title">
+    <form id="unlock-form">
+      <h2 id="lock-title">Unlock Ledger</h2>
+      <p class="caption">This device has a PIN. Enter it to open your books.</p>
+      <label>PIN <input id="unlock-pin" type="password" inputmode="numeric" autocomplete="off" maxlength="8" required /></label>
+      <p id="unlock-error" class="status warn" hidden></p>
+      <div class="modal-actions">
+        <button type="submit" class="primary">Unlock</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="palette" aria-label="Command palette">
     <input id="palette-q" type="search" placeholder="Jump, add, search, sync…" autocomplete="off" />

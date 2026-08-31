@@ -61,11 +61,11 @@ def main() -> None:
                 time.sleep(0.15)
         assert last and last[0] == 200, "home page did not load"
         html = last[1].decode("utf-8", "replace")
-        for needle in ("core.js", "view-overview", "palette", "search-all", "make-recurring"):
+        for needle in ("core.js", "view-overview", "palette", "search-all", "make-recurring", "lock-gate", "wallets", "skip-recurring", "repeat-last"):
             assert needle in html, f"missing {needle} in index"
 
         code, css = get("/styles.css")
-        assert code == 200 and b".palette-list" in css
+        assert code == 200 and b".palette-list" in css and b".wallet-row" in css
 
         code, info = get("/api/info")
         assert code == 200
@@ -73,13 +73,14 @@ def main() -> None:
         assert payload.get("ok") is True
         assert payload.get("port") == int(PORT)
 
-        code, empty = get("/api/sync/testdevice01")
+        sync_id = "testdevice" + str(int(time.time()))[-6:]
+        code, empty = get(f"/api/sync/{sync_id}")
         assert code == 404
 
         pack = {"v": 1, "salt": "YQ==", "iv": "YQ==", "ciphertext": "dGVzdA=="}
-        code, _ = put("/api/sync/testdevice01", pack)
+        code, _ = put(f"/api/sync/{sync_id}", pack)
         assert code == 200
-        code, stored = get("/api/sync/testdevice01")
+        code, stored = get(f"/api/sync/{sync_id}")
         assert code == 200
         assert json.loads(stored)["ciphertext"] == "dGVzdA=="
 
