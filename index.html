@@ -50,7 +50,10 @@
     <button type="button" class="tab" data-view="settings">Settings</button>
   </nav>
 
-  <p id="banner" class="banner" role="status" hidden></p>
+  <p id="banner" class="banner" role="status" hidden>
+    <span id="banner-text"></span>
+    <button type="button" class="ghost sm" id="dismiss-banner">Dismiss</button>
+  </p>
   <p id="recurring-bar" class="banner ok-banner" hidden>
     <span id="recurring-text"></span>
     <span class="btn-row">
@@ -234,6 +237,11 @@
             <button type="button" class="primary" id="sync-now">Sync now</button>
           </div>
           <p id="sync-detail" class="status" role="status"></p>
+        </article>
+        <article>
+          <h2>Wallet starting amounts</h2>
+          <p class="caption">Optional cash on hand. Overview then shows what is left after this month’s spend.</p>
+          <div id="wallet-starts" class="cap-grid"></div>
         </article>
         <article>
           <h2>Category caps</h2>

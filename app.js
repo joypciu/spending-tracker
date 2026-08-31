@@ -32,6 +32,8 @@ const DEFAULTS = {
   customMethods: [],
   recurringSkipped: {},
   pinHash: "",
+  startingBalances: {},
+  nagDismissedDate: "",
   searchAllMonths: false,
   entries: [],
   syncEnabled: false,
@@ -124,6 +126,7 @@ function loadState() {
       if (!merged.customCategories) merged.customCategories = [];
       if (!merged.customMethods) merged.customMethods = [];
       if (!merged.recurringSkipped) merged.recurringSkipped = {};
+      if (!merged.startingBalances) merged.startingBalances = {};
       if (!merged.deviceId) merged.deviceId = newId();
       if (!merged.syncUrl && location.protocol.startsWith("http")) {
         merged.syncUrl = location.origin;
@@ -210,8 +213,10 @@ function hideToast() {
 
 function setBanner(text) {
   const el = document.getElementById("banner");
+  const label = document.getElementById("banner-text");
   el.hidden = !text;
-  el.textContent = text || "";
+  if (label) label.textContent = text || "";
+  else el.textContent = text || "";
 }
 
 function fillSelect(el, items, withAll) {
@@ -587,13 +592,13 @@ function renderKpis() {
     <div class="kpi"><div class="value">${formatMoney(avg)}</div><div class="label">Average / day so far</div></div>
     <div class="kpi ${remainTone}"><div class="value">${budget ? formatMoney(remaining) : formatMoney(net)}</div><div class="label">${budget ? "Budget remaining" : "Net spend"}</div>${income ? `<div class="delta">${formatMoney(income)} in refunds</div>` : ""}</div>
   `;
-  renderWallets(list);
+  renderWallets();
 }
 
-function renderWallets(list) {
+function renderWallets() {
   const el = document.getElementById("wallets");
   if (!el) return;
-  const rows = LedgerCore.methodBalances(list, state.selectedMonth);
+  const rows = LedgerCore.walletSnapshot(state.entries, state.selectedMonth, state.startingBalances);
   if (!rows.length) {
     el.hidden = true;
     el.innerHTML = "";
@@ -601,10 +606,12 @@ function renderWallets(list) {
   }
   el.hidden = false;
   el.innerHTML = rows
-    .map(
-      ([name, value]) =>
-        `<button type="button" class="wallet" data-method="${escapeHtml(name)}"><span>${escapeHtml(name)}</span><strong>${formatMoney(value)}</strong></button>`,
-    )
+    .map((row) => {
+      const value = row.hasSeed ? row.remaining : row.net;
+      const label = row.hasSeed ? `${row.name} left` : `${row.name} spent`;
+      const tone = row.hasSeed && row.remaining < 0 ? "danger" : "";
+      return `<button type="button" class="wallet ${tone}" data-method="${escapeHtml(row.name)}"><span>${escapeHtml(label)}</span><strong>${formatMoney(value)}</strong></button>`;
+    })
     .join("");
 }
 
@@ -686,6 +693,8 @@ function renderDayPanel() {
   const iso = state.selectedDate;
   const items = state.entries.filter((e) => !e.deleted && e.date === iso).sort((a, b) => b.id.localeCompare(a.id));
   const spent = expenseTotal(items);
+  const income = incomeTotal(items);
+  const net = spent - income;
   const pretty = iso
     ? new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", {
         weekday: "long",
@@ -694,7 +703,10 @@ function renderDayPanel() {
       })
     : "Select a day";
   document.getElementById("day-panel-title").textContent = pretty;
-  document.getElementById("day-panel-total").textContent = formatMoney(spent);
+  document.getElementById("day-panel-total").textContent = formatMoney(net);
+  document.getElementById("day-panel-total").title = income
+    ? `${formatMoney(spent)} spent · ${formatMoney(income)} in`
+    : "";
   document.getElementById("day-panel-list").innerHTML = items.length
     ? items
         .map(
@@ -874,6 +886,15 @@ function renderSettings() {
     (c) =>
       `<label>${c}<input type="number" min="0" data-cap="${c}" placeholder="no cap" value="${state.categoryCaps[c] || ""}" /></label>`,
   ).join("");
+  const starts = document.getElementById("wallet-starts");
+  if (starts) {
+    starts.innerHTML = methods()
+      .map(
+        (m) =>
+          `<label>${m}<input type="number" min="0" data-wallet="${m}" placeholder="on hand" value="${state.startingBalances[m] || ""}" /></label>`,
+      )
+      .join("");
+  }
   document.getElementById("template-list").innerHTML = templates.length
     ? templates
         .map(
@@ -920,7 +941,8 @@ function render() {
 
   const today = todayIso();
   const loggedToday = state.entries.some((e) => !e.deleted && e.date === today && e.type !== "income");
-  setBanner(loggedToday ? "" : "Nothing logged today. Add purchases as they happen so 10:30 PM is only a backup.");
+  const hideNag = loggedToday || state.nagDismissedDate === today;
+  setBanner(hideNag ? "" : "Nothing logged today. Add purchases as they happen so 10:30 PM is only a backup.");
   const pending = LedgerCore.pendingRecurring(state.entries, state.selectedMonth, state.recurringSkipped);
   const recBar = document.getElementById("recurring-bar");
   if (recBar) {
@@ -1302,6 +1324,15 @@ function bind() {
     saveState();
     renderInsights();
   };
+  document.getElementById("wallet-starts").onchange = (e) => {
+    const input = e.target.closest("[data-wallet]");
+    if (!input) return;
+    if (!state.startingBalances) state.startingBalances = {};
+    state.startingBalances[input.dataset.wallet] = input.value;
+    bumpMeta();
+    saveState();
+    renderWallets();
+  };
   document.getElementById("template-list").onclick = (e) => {
     const use = e.target.closest("[data-use-tpl]");
     if (use) {
@@ -1402,6 +1433,11 @@ function bind() {
   document.getElementById("sync-now").onclick = () => syncNow();
   document.getElementById("apply-recurring").onclick = applyPendingRecurring;
   document.getElementById("skip-recurring").onclick = skipPendingRecurring;
+  document.getElementById("dismiss-banner").onclick = () => {
+    state.nagDismissedDate = todayIso();
+    saveState();
+    setBanner("");
+  };
   document.getElementById("repeat-last").onclick = repeatLast;
   document.getElementById("wallets").onclick = (e) => {
     const btn = e.target.closest("[data-method]");
@@ -1574,6 +1610,10 @@ function bind() {
     if (e.key === "n" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       openModal({ date: state.selectedDate || todayIso() });
+    }
+    if ((e.key === "r" || e.key === "R") && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      repeatLast();
     }
     if (e.key === "/" && !typing) {
       e.preventDefault();

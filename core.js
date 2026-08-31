@@ -98,6 +98,23 @@ const LedgerCore = (() => {
     return [...map.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
   }
 
+  function walletSnapshot(entries, month, starting) {
+    const nets = new Map(methodBalances(entries, month));
+    const start = starting || {};
+    const names = new Set([...nets.keys(), ...Object.keys(start)]);
+    const rows = [];
+    for (const name of names) {
+      if (!name) continue;
+      const net = nets.get(name) || 0;
+      const seed = Number.parseFloat(start[name]);
+      const hasSeed = Number.isFinite(seed) && seed > 0;
+      if (!hasSeed && !net) continue;
+      rows.push({ name, net, remaining: hasSeed ? seed - net : null, hasSeed });
+    }
+    rows.sort((a, b) => Math.abs(b.remaining ?? b.net) - Math.abs(a.remaining ?? a.net));
+    return rows;
+  }
+
   function merchantKey(note) {
     const t = String(note || "")
       .toLowerCase()
@@ -203,6 +220,7 @@ const LedgerCore = (() => {
     allCategories,
     allMethods,
     methodBalances,
+    walletSnapshot,
     merchantKey,
     unusualDays,
     pendingRecurring,

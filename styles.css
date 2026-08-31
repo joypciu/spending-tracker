@@ -186,6 +186,20 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 .palette-list button.active, .palette-list button:hover { background: var(--fill); }
 .day-chart.trend { height: 160px; }
+.banner {
+  margin: 12px 22px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--fill);
+  color: var(--warn);
+  font-size: 13px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+.banner.ok-banner { color: var(--ok); }
+.wallet.danger strong { color: var(--danger); }
 .status { font-size: 12px; margin: 8px 0 0; }
 .status.ok { color: var(--ok); }
 .status.warn { color: var(--warn); }
