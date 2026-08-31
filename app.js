@@ -62,6 +62,8 @@ let remindTimer = null;
 let undo = null;
 let modalSnap = "";
 let calendarFollow = true;
+let idleLockTimer = null;
+const IDLE_LOCK_MS = 5 * 60 * 1000;
 let editingId = null;
 let toastTimer = null;
 let state = loadState();
@@ -1192,6 +1194,28 @@ function showLockGate() {
 function hideLockGate() {
   const gate = document.getElementById("lock-gate");
   if (gate?.open) gate.close();
+  armIdleLock();
+}
+
+function lockNow() {
+  if (!state.pinHash) return;
+  try {
+    sessionStorage.removeItem("ledger-unlocked");
+  } catch {
+    /* ignore */
+  }
+  const modal = document.getElementById("entry-modal");
+  if (modal?.open) closeModal(true);
+  const pal = document.getElementById("palette");
+  if (pal?.open) pal.close();
+  showLockGate();
+}
+
+function armIdleLock() {
+  if (idleLockTimer) clearTimeout(idleLockTimer);
+  idleLockTimer = null;
+  if (!state.pinHash || !pinUnlocked()) return;
+  idleLockTimer = setTimeout(lockNow, IDLE_LOCK_MS);
 }
 
 function download(name, body, type) {
@@ -1723,6 +1747,7 @@ function bind() {
     status.hidden = false;
     status.className = "status ok";
     status.textContent = "PIN saved on this device.";
+    armIdleLock();
   };
   document.getElementById("pin-clear").onclick = () => {
     state.pinHash = "";
@@ -1923,6 +1948,12 @@ function bind() {
       document.getElementById("next-month").click();
     }
   });
+  for (const ev of ["pointerdown", "keydown", "touchstart"]) {
+    document.addEventListener(ev, armIdleLock, { passive: true });
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") armIdleLock();
+  });
 }
 
 function registerServiceWorker() {
@@ -1950,6 +1981,7 @@ saveState();
 render();
 registerServiceWorker();
 showLockGate();
+armIdleLock();
 if (state.remindEnabled) enableReminders();
 if (state.syncEnabled) syncNow({ silent: true });
 if (location.protocol.startsWith("http")) {
