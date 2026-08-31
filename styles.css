@@ -374,6 +374,14 @@ td { max-width: 280px; overflow-wrap: anywhere; }
   font-weight: 600;
 }
 .empty-row, .empty-card { color: var(--faint); text-align: center; padding: 28px 12px; }
+.empty-hero {
+  border: 1px solid var(--line);
+  background: var(--kpi);
+  padding: 18px 16px 16px;
+  margin-bottom: 18px;
+}
+.empty-hero h2 { margin: 0 0 6px; font-size: 18px; }
+.empty-hero p { margin: 0 0 14px; color: var(--muted); max-width: 42ch; }
 .tag {
   display: inline-block;
   font-size: 11px;

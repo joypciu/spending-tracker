@@ -67,6 +67,14 @@
     <section id="view-overview" class="view" aria-labelledby="overview-heading">
       <h1 id="overview-heading" class="sr-only">Overview</h1>
       <div class="kpi-row" id="kpis"></div>
+      <div id="empty-books" class="empty-hero" hidden>
+        <h2>Start this month</h2>
+        <p>New books begin empty. Add a purchase, or load a few sample rows to see how the calendar looks.</p>
+        <div class="btn-row">
+          <button type="button" class="primary" id="empty-add">Add expense</button>
+          <button type="button" class="ghost" id="empty-sample">See a sample day</button>
+        </div>
+      </div>
       <div id="budget-bar" class="budget-card" hidden>
         <div class="budget-bar-meta">
           <span id="budget-left"></span>
@@ -283,6 +291,7 @@
             <button type="button" class="ghost" id="export-json">Download JSON</button>
             <label class="ghost file-btn">Import JSON<input id="import-json" type="file" accept="application/json" hidden /></label>
             <button type="button" class="ghost" id="copy-summary-settings">Copy month summary</button>
+            <button type="button" class="ghost" id="load-sample">Load sample entries</button>
             <button type="button" class="ghost" id="print-month">Print month</button>
           </div>
           <p class="caption">Import merges by id. Pairing stays on the device unless you export JSON.</p>

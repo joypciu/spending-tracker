@@ -49,15 +49,25 @@ const DEFAULTS = {
   deviceId: "",
 };
 
-const SEED_ENTRIES = [
-  { id: "1bef5c5f-af0c-4bb0-8b48-f81f1ea2fe74", date: "2026-08-31", amount: 10, category: "Food", note: "1 cup rong cha", method: "Cash", type: "expense" },
-  { id: "a66e1d3f-fee7-4b23-abd2-7eb74b452a63", date: "2026-08-31", amount: 80, category: "Food", note: "dupurer kawa from niribili ( 1 pis murgi)", method: "Cash", type: "expense" },
-  { id: "16a0a341-18b4-4bbb-9fbd-80741884f4ae", date: "2026-08-31", amount: 40, category: "Groceries", note: "2 litre water", method: "Cash", type: "expense" },
-  { id: "a32d0bd1-d0ed-490b-9faf-289a5d73987c", date: "2026-08-30", amount: 200, category: "Food", note: "raater jaal nasta 80 taka + 1 pis kitchen roast", method: "Cash", type: "expense" },
-  { id: "52735be3-0ee7-4745-9de7-757166c2f54b", date: "2026-08-30", amount: 95, category: "Food", note: "apple 2 ta", method: "Cash", type: "expense" },
-  { id: "b079f60a-5538-459f-9f12-e5225015cfc7", date: "2026-08-30", amount: 50, category: "Transport", note: "road 14 rickshaw + saudia er polare 20 taka extra dichilam", method: "Cash", type: "expense" },
-  { id: "69c170b3-e210-4bf3-b943-2bc2c0734317", date: "2026-08-30", amount: 40, category: "Food", note: "banana", method: "Cash", type: "expense" },
-];
+function sampleEntries() {
+  const today = todayIso();
+  const yesterday = LedgerCore.shiftIso(today, -1);
+  return [
+    { date: today, amount: 40, category: "Food", note: "Tea", method: "Cash", type: "expense" },
+    { date: today, amount: 120, category: "Groceries", note: "Water", method: "Cash", type: "expense" },
+    { date: yesterday, amount: 50, category: "Transport", note: "Rickshaw", method: "Cash", type: "expense" },
+  ].map((row) => migrateEntry({ ...row, id: newId() }));
+}
+
+function loadSampleEntries() {
+  const live = state.entries.some((e) => !e.deleted);
+  if (live && !confirm("Add three sample purchases for today and yesterday? Existing rows stay.")) return;
+  state.entries = state.entries.concat(sampleEntries());
+  bumpMeta();
+  saveState();
+  render();
+  toast("Sample purchases added");
+}
 
 let remindTimer = null;
 let undo = null;
@@ -158,9 +168,7 @@ function loadState() {
     if (raw) {
       const parsed = JSON.parse(raw);
       const merged = { ...DEFAULTS, ...parsed };
-      merged.entries = Array.isArray(parsed.entries)
-        ? parsed.entries.map(migrateEntry)
-        : structuredClone(SEED_ENTRIES);
+      merged.entries = Array.isArray(parsed.entries) ? parsed.entries.map(migrateEntry) : [];
       if (!merged.selectedDate) merged.selectedDate = todayIso();
       if (!merged.budgetsByMonth) merged.budgetsByMonth = {};
       if (!merged.categoryCaps) merged.categoryCaps = {};
@@ -180,7 +188,7 @@ function loadState() {
   }
   return {
     ...structuredClone(DEFAULTS),
-    entries: structuredClone(SEED_ENTRIES).map(migrateEntry),
+    entries: [],
     selectedMonth: currentMonthKey(),
     selectedDate: todayIso(),
     deviceId: newId(),
@@ -1126,8 +1134,13 @@ function render() {
   if (allMonths) allMonths.checked = !!state.searchAllMonths;
 
   const today = todayIso();
+  const liveCount = state.entries.filter((e) => !e.deleted).length;
+  const emptyHero = document.getElementById("empty-books");
+  if (emptyHero) emptyHero.hidden = liveCount > 0;
+  const kpis = document.getElementById("kpis");
+  if (kpis) kpis.hidden = liveCount === 0;
   const loggedToday = state.entries.some((e) => !e.deleted && e.date === today && e.type !== "income");
-  const hideNag = loggedToday || state.nagDismissedDate === today;
+  const hideNag = liveCount === 0 || loggedToday || state.nagDismissedDate === today;
   setBanner(hideNag ? "" : "Nothing logged today. Add purchases as they happen so 10:30 PM is only a backup.");
   const pending = LedgerCore.pendingRecurring(state.entries, state.selectedMonth, state.recurringSkipped);
   const recBar = document.getElementById("recurring-bar");
@@ -1416,6 +1429,9 @@ function bind() {
     render();
   };
   document.getElementById("open-add").onclick = () => openModal({ date: state.selectedDate || todayIso() });
+  document.getElementById("empty-add").onclick = () => openModal({ date: state.selectedDate || todayIso() });
+  document.getElementById("empty-sample").onclick = loadSampleEntries;
+  document.getElementById("load-sample").onclick = loadSampleEntries;
   document.getElementById("fab-add").onclick = () => openModal({ date: state.selectedDate || todayIso() });
   document.getElementById("day-add").onclick = () => openModal({ date: state.selectedDate || todayIso() });
   document.getElementById("day-repeat").onclick = repeatLast;
