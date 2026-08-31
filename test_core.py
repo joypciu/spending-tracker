@@ -86,6 +86,7 @@ def main() -> None:
     assert shift_month("2026-01", -1) == "2025-12"
     assert shift_iso("2026-08-31", 1) == "2026-09-01"
     assert shift_iso("2026-09-01", -1) == "2026-08-31"
+    assert 800 - 95 == 705
     assert shift_month("2026-08", 1) == "2026-09"
     assert days_in_month(2026, 2) == 28
     entries = [

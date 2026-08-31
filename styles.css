@@ -185,7 +185,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   padding: 8px 10px;
 }
 .palette-list button.active, .palette-list button:hover { background: var(--fill); }
-mark { background: var(--accent-2); color: inherit; padding: 0 2px; }
+.caption.over-cap { color: var(--danger); }
 .day-chart.trend { height: 160px; }
 .banner {
   margin: 12px 22px 0;

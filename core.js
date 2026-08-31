@@ -235,6 +235,12 @@ const LedgerCore = (() => {
     return rows;
   }
 
+  function dailyCapLeft(cap, spent) {
+    const n = Number(cap);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return n - Number(spent || 0);
+  }
+
   return {
     BASE_CATEGORIES,
     METHODS,
@@ -260,6 +266,7 @@ const LedgerCore = (() => {
     copyRecurring,
     monthTrend,
     filterLedger,
+    dailyCapLeft,
   };
 })();
 

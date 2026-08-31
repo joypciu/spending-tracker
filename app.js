@@ -346,6 +346,7 @@ function openModal(preset) {
   document.getElementById("note").value = preset?.note || "";
   document.getElementById("save-template").checked = false;
   document.getElementById("make-recurring").checked = !!preset?.recurringId;
+  document.getElementById("modal-duplicate").hidden = !editingId;
   document.getElementById("dup-warn").hidden = true;
   fillNoteSuggest();
   renderTemplateChips();
@@ -744,6 +745,8 @@ function renderCalendar() {
   }
   document.getElementById("calendar").innerHTML = html;
   document.getElementById("cal-title").textContent = monthLabel(state.selectedMonth);
+  const selectedDay = document.querySelector("#calendar .day.selected");
+  if (selectedDay) selectedDay.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
 function renderDayPanel() {
@@ -764,6 +767,19 @@ function renderDayPanel() {
   document.getElementById("day-panel-total").title = income
     ? `${formatMoney(spent)} spent · ${formatMoney(income)} in`
     : "";
+  const capNote = document.getElementById("day-cap-note");
+  if (capNote) {
+    const left = LedgerCore.dailyCapLeft(state.dailyCap, spent);
+    if (left == null) {
+      capNote.hidden = true;
+      capNote.textContent = "";
+    } else {
+      capNote.hidden = false;
+      capNote.textContent =
+        left >= 0 ? `${formatMoney(left)} left on the daily cap.` : `${formatMoney(-left)} over the daily cap.`;
+      capNote.className = left >= 0 ? "caption" : "caption over-cap";
+    }
+  }
   document.getElementById("day-panel-list").innerHTML = items.length
     ? items
         .map(
@@ -1432,6 +1448,21 @@ function bind() {
   document.getElementById("modal-cancel").onclick = (e) => {
     e.preventDefault();
     closeModal();
+  };
+  document.getElementById("modal-duplicate").onclick = (e) => {
+    e.preventDefault();
+    const src = editingId ? state.entries.find((x) => x.id === editingId) : null;
+    closeModal();
+    if (!src) return;
+    openModal({
+      date: state.selectedDate || src.date || todayIso(),
+      amount: src.amount,
+      category: src.category,
+      method: src.method,
+      type: src.type,
+      note: src.note,
+      recurringId: src.recurringId,
+    });
   };
   document.getElementById("entry-form").onsubmit = (e) => {
     e.preventDefault();
