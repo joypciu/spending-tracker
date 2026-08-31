@@ -319,6 +319,7 @@ function openModal(preset) {
   document.getElementById("dup-warn").hidden = true;
   fillNoteSuggest();
   renderTemplateChips();
+  renderAmountChips();
   document.getElementById("entry-modal").showModal();
   document.getElementById("amount").focus();
 }
@@ -346,10 +347,17 @@ function saveEntryFromForm() {
     recurringId: existingRecurring(),
   };
   const dup = LedgerCore.duplicateOf(state.entries, payload);
+  const warn = document.getElementById("dup-warn");
   if (dup && !editingId) {
-    const warn = document.getElementById("dup-warn");
     warn.hidden = false;
     warn.textContent = `Looks like a duplicate of ${dup.note || dup.category} on ${dup.date}. Save again to keep both.`;
+    if (!saveEntryFromForm._force) {
+      saveEntryFromForm._force = true;
+      return false;
+    }
+  } else if (!editingId && date > todayIso()) {
+    warn.hidden = false;
+    warn.textContent = "That date is in the future. Save again if you meant to pre-log it.";
     if (!saveEntryFromForm._force) {
       saveEntryFromForm._force = true;
       return false;
@@ -361,7 +369,7 @@ function saveEntryFromForm() {
     toast("Entry updated");
   } else {
     state.entries.unshift(payload);
-    toast("Expense saved");
+    toast("Expense saved", "Undo", () => undoLastSave(payload.id));
   }
   if (document.getElementById("save-template").checked) {
     state.templates.unshift({
@@ -382,6 +390,29 @@ function saveEntryFromForm() {
   return true;
 }
 
+function restoreUndo() {
+  if (!undo) return;
+  const live = state.entries.find((e) => e.id === undo.id);
+  if (live) {
+    live.deleted = false;
+    live.updatedAt = Date.now();
+  } else {
+    state.entries.unshift({ ...undo, updatedAt: Date.now() });
+  }
+  undo = null;
+  saveState();
+  render();
+}
+
+function undoLastSave(id) {
+  const live = state.entries.find((e) => e.id === id);
+  if (!live || live.deleted) return;
+  live.deleted = true;
+  live.updatedAt = Date.now();
+  saveState();
+  render();
+}
+
 function removeEntry(id) {
   const found = state.entries.find((e) => e.id === id);
   if (!found) return;
@@ -390,20 +421,7 @@ function removeEntry(id) {
   undo = { ...found, deleted: false };
   saveState();
   render();
-  toast("Entry removed", "Undo", () => {
-    if (undo) {
-      const live = state.entries.find((e) => e.id === undo.id);
-      if (live) {
-        live.deleted = false;
-        live.updatedAt = Date.now();
-      } else {
-        state.entries.unshift({ ...undo, updatedAt: Date.now() });
-      }
-      undo = null;
-      saveState();
-      render();
-    }
-  });
+  toast("Entry removed", "Undo", restoreUndo);
 }
 
 function applyTemplate(t) {
@@ -528,6 +546,15 @@ function loggingStreak() {
     }
   }
   return n;
+}
+
+function renderAmountChips() {
+  const box = document.getElementById("amount-chips");
+  if (!box) return;
+  const amounts = LedgerCore.suggestAmounts(state.entries);
+  box.innerHTML = amounts
+    .map((n) => `<button type="button" class="chip" data-amt-chip="${n}">${formatMoney(n)}</button>`)
+    .join("");
 }
 
 function renderTemplateChips() {
@@ -738,17 +765,21 @@ function renderLedger() {
       </tr>`,
     )
     .join("");
-  document.getElementById("purchases").innerHTML = tableHtml;
-  document.getElementById("ledger-cards").innerHTML = rows
-    .map(
-      (e) => `<li data-id="${e.id}">
+  document.getElementById("purchases").innerHTML = rows.length
+    ? tableHtml
+    : `<tr><td colspan="6" class="empty-row">No matching rows. Clear filters or add an expense.</td></tr>`;
+  document.getElementById("ledger-cards").innerHTML = rows.length
+    ? rows
+        .map(
+          (e) => `<li data-id="${e.id}">
         <button type="button" class="link" data-edit="${e.id}">${escapeHtml(e.note || e.category)}</button>
         <div class="amt ${e.type === "income" ? "income" : ""}">${e.type === "income" ? "+" : ""}${formatMoney(e.amount)}</div>
         <div class="sub">${e.date} · ${e.category} · ${e.method}</div>
         <button type="button" class="icon" data-del="${e.id}" aria-label="Remove ${escapeHtml(e.note || e.category)}">×</button>
       </li>`,
-    )
-    .join("");
+        )
+        .join("")
+    : `<li class="empty-card"><div class="meta">No matching rows. Clear filters or add an expense.</div></li>`;
 }
 
 function renderInsights() {
@@ -1379,6 +1410,12 @@ function bind() {
       render();
     }
   };
+  document.getElementById("amount-chips").onclick = (e) => {
+    const chip = e.target.closest("[data-amt-chip]");
+    if (!chip) return;
+    document.getElementById("amount").value = chip.dataset.amtChip;
+    document.getElementById("amount").focus();
+  };
   document.getElementById("quick-templates").onclick = (e) => {
     const chip = e.target.closest(".chip");
     if (!chip) return;
@@ -1610,6 +1647,10 @@ function bind() {
     if (e.key === "n" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       openModal({ date: state.selectedDate || todayIso() });
+    }
+    if ((e.key === "z" || e.key === "Z") && (e.ctrlKey || e.metaKey) && !typing) {
+      e.preventDefault();
+      restoreUndo();
     }
     if ((e.key === "r" || e.key === "R") && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();

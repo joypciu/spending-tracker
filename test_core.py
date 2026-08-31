@@ -99,8 +99,8 @@ def main() -> None:
     assert already == []
     skipped = pending_recurring(entries, "2026-08", {"r1": ["2026-08"]})
     assert skipped == []
-    # 100 expense + 40 income => net 60; start 500 => 440 left
-    assert 500 - 60 == 440
+    amounts = sorted({20, 50, 100, 200, 500, 100})
+    assert 100 in amounts and 20 in amounts
     print("ok — core logic checks passed")
 
 

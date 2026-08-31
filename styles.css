@@ -364,7 +364,7 @@ tr[data-id]:hover td { background: var(--fill); }
   padding: 0;
   font-weight: 600;
 }
-.income { color: var(--ok); }
+.empty-row, .empty-card { color: var(--faint); text-align: center; padding: 28px 12px; }
 .tag {
   display: inline-block;
   font-size: 11px;

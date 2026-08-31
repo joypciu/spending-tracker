@@ -98,6 +98,16 @@ const LedgerCore = (() => {
     return [...map.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
   }
 
+  function suggestAmounts(entries, extras) {
+    const set = new Set((extras || [20, 50, 100, 200, 500]).map(Number));
+    for (const e of entries || []) {
+      if (e.deleted || e.type === "income") continue;
+      const n = Number(e.amount);
+      if (n > 0) set.add(n);
+    }
+    return [...set].filter((n) => n > 0).sort((a, b) => a - b).slice(0, 10);
+  }
+
   function walletSnapshot(entries, month, starting) {
     const nets = new Map(methodBalances(entries, month));
     const start = starting || {};
@@ -220,6 +230,7 @@ const LedgerCore = (() => {
     allCategories,
     allMethods,
     methodBalances,
+    suggestAmounts,
     walletSnapshot,
     merchantKey,
     unusualDays,
